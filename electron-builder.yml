@@ -1,4 +1,5 @@
-# 桌面端打包配置：产出免安装 portable exe 与 NSIS 安装包
+# 桌面端打包配置：只产出 NSIS 安装包
+# 需要免安装单文件时用 npm run build:win:portable（命令行覆盖目标列表，不用改本文件）
 appId: com.local.video-fetch
 productName: 视频分辨率解析下载器
 copyright: 仅供个人在已获授权的范围内使用
@@ -30,8 +31,6 @@ asar: true
 win:
   icon: build/icon.ico
   target:
-    - target: portable
-      arch: [x64]
     - target: nsis
       arch: [x64]
 
@@ -41,6 +40,3 @@ nsis:
   createDesktopShortcut: true
   shortcutName: 视频分辨率解析下载器
   deleteAppDataOnUninstall: false
-
-portable:
-  artifactName: 视频解析下载器-便携版-${version}.exe

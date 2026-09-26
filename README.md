@@ -144,6 +144,16 @@ B 站多数视频能拿到 720P / 1080P（个别视频未登录也能到 1080P�
 npm run build:win     # 构建前端 + 主进程，再产出 release/ 下的两个 exe
 ```
 
+按需选择产物（命令行里的 `--win <target>` 会覆盖配置里的目标列表，不用改编配置文件）：
+
+```powershell
+npm run build:win:installer   # 只出 NSIS 安装包
+npm run build:win:portable    # 只出免安装单文件
+```
+
+想永久去掉便携版：把 `electron-builder.yml` 里 `win.target` 下的 `portable` 那两行删掉，
+之后 `npm run build:win` 就只产安装包，也省掉一次 150MB 的压缩。
+
 ### 改功能时要不要重新打包
 
 不用每次都打包。按目的选：

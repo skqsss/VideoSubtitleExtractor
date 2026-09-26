@@ -13,6 +13,8 @@
     "build:main": "esbuild electron/main.ts --bundle --platform=node --format=esm --target=node20 --external:electron --external:fastify --external:@fastify/static --external:zod --outfile=dist-electron/main.mjs",
     "build:electron": "npm run build && npm run build:main",
     "build:win": "npm run build:electron && electron-builder --win --publish never",
+    "build:win:installer": "npm run build:electron && electron-builder --win nsis --publish never",
+    "build:win:portable": "npm run build:electron && electron-builder --win portable --publish never",
     "electron:start": "npm run build:main && electron .",
     "electron:dev": "npm run build:main && node scripts/electron-dev.mjs",
     "start": "npm run build && node src/server/index.ts",
