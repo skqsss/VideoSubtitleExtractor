@@ -80,18 +80,39 @@ npm run type-check   # vue-tsc 全量类型检查（含服务端）
 
 也可以在界面右上角"设置"里改，保存后立即生效。
 
-## Cookie 与清晰度
+## Cookie 与清晰度（B 站 1080P+ / 抖音）
 
-清晰度上限由平台按登录态发放，本项目提供两条取 Cookie 的路径：
+清晰度上限与能否解析由平台按 Cookie 发放，本工具提供两条路，按推荐度排序。
 
-1. `cookieBrowser`：`--cookies-from-browser`，直接从浏览器读。
-   - Chrome / Edge 127 以后启用了 App-Bound Encryption，yt-dlp 常见报错 `Failed to decrypt with DPAPI`，
-     此时需要**完全退出浏览器**后重试，或改用别的浏览器；Firefox 若从未使用过，也不会有 Cookie 数据库。
-2. `cookiesFile`：浏览器扩展导出的 `cookies.txt`，填写路径后与浏览器 Cookie 合并使用。
-   - 抖音对 "Fresh cookies" 校验严格，实测**必须**走这条路径才能解析（未登录也要一份新 Cookie）。
+### 方式 A：导出 cookies.txt（推荐，不受浏览器加密影响）
 
-读取浏览器 Cookie 失败时，解析与下载都会自动降级为"不读取 Cookie"再试一次，并在界面给出黄色提示，
-不会让整个操作直接失败——只是清晰度可能被限制在未登录档位。
+1. 浏览器装扩展 **Get cookies.txt LOCALLY**（开源，本地读取，不上传）。
+2. 分别打开并登录 **bilibili.com** 与 **douyin.com**（抖音不登录也行，但要是刚访问过的会话）。
+3. 在两个页面各点一次扩展图标 → Export，得到两份 cookies.txt。
+4. 把两份文件放进同一个文件夹，例如 `D:\video-workspace\cookies\`。
+5. 本工具「设置 → cookies.txt 路径」填这个**文件夹**（填单个文件、或用 `;` 分隔多个文件也可以）→ 保存。
+6. 点「检查 Cookie」确认结果：会显示合并了几个文件、多少条 Cookie、每个域名下有哪些 Cookie 名。
+   B 站至少要看到 `SESSDATA`，抖音至少要看到 `ttwid`。
+
+工具每次请求前会把配置里的文件合并成一份临时文件（`cache/yt-dlp-cookies.txt`）再交给 yt-dlp，
+**不会改动你导出的原始文件**——yt-dlp 默认会把 Cookie 回写进传入的文件，所以这一步很有必要。
+
+### 方式 B：让工具直接读浏览器（能不能用取决于浏览器）
+
+- Firefox 的 Cookie 不加密，通常可直接读：设置里把 Cookie 来源选 Firefox（前提是该 Firefox 登录过 B 站）。
+- Chrome / Edge 127 之后启用了 App-Bound Encryption，yt-dlp 常见 `Failed to decrypt with DPAPI`；
+  浏览器正在运行时还可能报 `Could not copy Chrome cookie database`。
+  可以试**完全退出浏览器**或**以管理员身份运行**，不行就走方式 A。
+
+### 方式 C：什么都不配
+
+B 站多数视频能拿到 720P / 1080P（个别视频未登录也能到 1080P），抖音基本解析不了。
+
+> ⚠️ **过期或与账号不匹配的 Cookie 比不读取更差**：实测本机用一份伪造 SESSDATA 时，
+> 同一个 B 站视频只列出 480P；清空后反而恢复到 1080P。导出要趁刚登录时做，过期就重新导出。
+
+无论哪条路，读浏览器 Cookie 失败时工具都会自动降级为"不读取 Cookie"重试一次，并在界面给出黄色提示，
+不会让整步操作直接失败，只是清晰度可能被限制在未登录档位。
 
 ## 已知实现细节
 
@@ -104,6 +125,8 @@ npm run type-check   # vue-tsc 全量类型检查（含服务端）
 - **取消**：终止整个进程树（`taskkill /T /F`），并按本次任务写出的目标路径精确删除 `.part`、`.ytdl` 残留。
 - **进度推送**：SSE 响应必须带 `Content-Type: text/event-stream`，否则浏览器会直接拒绝连接（界面会一直显示"正在重连进度通道"）。
 - **代理**：外网（YouTube）需要代理，B 站 / 抖音建议直连；输入条上的"本次走代理"用于单次覆盖。
+- **Cookie 来源的选择规则**：配置了 cookies.txt 时默认不再读浏览器 Cookie（那条路在 Chrome / Edge 上大概率失败，白白多花时间）；
+  想在输入条上显式选某个浏览器时，两者会一起送给 yt-dlp。
 
 ## 下一步（不在本期）
 
