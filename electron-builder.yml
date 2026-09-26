@@ -1,0 +1,46 @@
+# 桌面端打包配置：产出免安装 portable exe 与 NSIS 安装包
+appId: com.local.video-fetch
+productName: 视频分辨率解析下载器
+copyright: 仅供个人在已获授权的范围内使用
+
+directories:
+  output: release
+  buildResources: build
+
+# 直接复用 node_modules 里已下载好的 Electron 发行版：
+# 本机解压后重命名临时目录会被杀软/索引占用导致 EPERM，走这条路可以完全跳过下载解包
+electronDist: node_modules/electron/dist
+
+# 应用代码 + 生产依赖；electron-builder 会自动剔除 devDependencies
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+  - node_modules/**
+
+# yt-dlp 与 ffmpeg 随包分发：asar 是只读归档，运行时由主进程复制到 userData 再执行
+extraResources:
+  - from: bin
+    to: bin
+    filter:
+      - '**/*'
+
+asar: true
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: portable
+      arch: [x64]
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: 视频分辨率解析下载器
+  deleteAppDataOnUninstall: false
+
+portable:
+  artifactName: 视频解析下载器-便携版-${version}.exe

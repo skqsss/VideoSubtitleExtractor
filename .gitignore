@@ -44,3 +44,4 @@ downloads/
 cache/
 config.json
 release/
+dist-electron/

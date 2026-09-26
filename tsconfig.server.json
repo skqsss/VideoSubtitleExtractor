@@ -1,7 +1,7 @@
 // TypeScript 配置：本地服务、共享逻辑与单元测试（由 Node 原生类型擦除直接运行）
 {
   "extends": "@tsconfig/node24/tsconfig.json",
-  "include": ["src/server/**/*.ts", "src/shared/**/*.ts", "tests/**/*.ts"],
+  "include": ["src/server/**/*.ts", "src/shared/**/*.ts", "electron/**/*.ts", "tests/**/*.ts"],
   "compilerOptions": {
     // 与 Node ESM 的解析规则保持一致，导入需显式带 .ts 后缀
     "module": "nodenext",
