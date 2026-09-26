@@ -86,9 +86,12 @@ npm run type-check   # vue-tsc 全量类型检查（含服务端）
 
 ### 方式 A：导出 cookies.txt（推荐，不受浏览器加密影响）
 
-1. 浏览器装扩展 **Get cookies.txt LOCALLY**（开源，本地读取，不上传）。
+1. 浏览器装一个 Cookie 导出扩展（都只在本地读取，不上传）：
+   - **Cookie-Editor**：Edge 加载项商店里搜得到（特色扩展），点 Export → JSON 即可；
+   - **Get cookies.txt LOCALLY**：Chrome 应用商店里的开源扩展，导出的是 Netscape 格式 `.txt`。
+   两种格式本工具都认，导出时选哪个都行。
 2. 分别打开并登录 **bilibili.com** 与 **douyin.com**（抖音不登录也行，但要是刚访问过的会话）。
-3. 在两个页面各点一次扩展图标 → Export，得到两份 cookies.txt。
+3. 在两个页面各点一次扩展图标 → Export，得到两份导出文件（`.txt` 或 `.json`）。
 4. 把两份文件放进同一个文件夹，例如 `D:\video-workspace\cookies\`。
 5. 本工具「设置 → cookies.txt 路径」填这个**文件夹**（填单个文件、或用 `;` 分隔多个文件也可以）→ 保存。
 6. 点「检查 Cookie」确认结果：会显示合并了几个文件、多少条 Cookie、每个域名下有哪些 Cookie 名。
@@ -96,6 +99,7 @@ npm run type-check   # vue-tsc 全量类型检查（含服务端）
 
 工具每次请求前会把配置里的文件合并成一份临时文件（`cache/yt-dlp-cookies.txt`）再交给 yt-dlp，
 **不会改动你导出的原始文件**——yt-dlp 默认会把 Cookie 回写进传入的文件，所以这一步很有必要。
+导出的 JSON 会被自动转成 yt-dlp 需要的 Netscape 格式（含 `#HttpOnly_` 前缀、过期时间秒级换算）。
 
 ### 方式 B：让工具直接读浏览器（能不能用取决于浏览器）
 
@@ -127,6 +131,8 @@ B 站多数视频能拿到 720P / 1080P（个别视频未登录也能到 1080P�
 - **代理**：外网（YouTube）需要代理，B 站 / 抖音建议直连；输入条上的"本次走代理"用于单次覆盖。
 - **Cookie 来源的选择规则**：配置了 cookies.txt 时默认不再读浏览器 Cookie（那条路在 Chrome / Edge 上大概率失败，白白多花时间）；
   想在输入条上显式选某个浏览器时，两者会一起送给 yt-dlp。
+- **Cookie 文件格式**：目录里的 `.txt`（Netscape）与 `.json`（Cookie-Editor / Chrome 风格）都会被解析合并，
+  内容不是 Cookie 的文件会被跳过并在日志里记一笔，不会让整条链路失败。
 
 ## 下一步（不在本期）
 
