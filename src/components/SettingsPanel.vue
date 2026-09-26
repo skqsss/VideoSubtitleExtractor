@@ -14,6 +14,8 @@ const configStore = useConfigStore()
 /** 表单草稿，打开抽屉时从配置同步 */
 const draft = ref({
   downloadDir: '',
+  ytdlpPath: '',
+  ffmpegDir: '',
   cookieBrowser: 'edge' as CookieBrowser,
   cookiesFile: '',
   proxy: '',
@@ -40,6 +42,8 @@ watch(
 
     draft.value = {
       downloadDir: config.downloadDir,
+      ytdlpPath: config.ytdlpPath,
+      ffmpegDir: config.ffmpegDir,
       cookieBrowser: config.cookieBrowser,
       cookiesFile: config.cookiesFile,
       proxy: config.proxy,
@@ -103,6 +107,17 @@ async function saveSettings(): Promise<void> {
           <span class="field__label">下载目录</span>
           <input v-model="draft.downloadDir" class="input mono" type="text" />
         </label>
+
+        <div class="settings__row">
+          <label class="field">
+            <span class="field__label">yt-dlp 路径（相对路径按项目根解析）</span>
+            <input v-model="draft.ytdlpPath" class="input mono" type="text" />
+          </label>
+          <label class="field">
+            <span class="field__label">ffmpeg 目录（shared 版要整目录）</span>
+            <input v-model="draft.ffmpegDir" class="input mono" type="text" />
+          </label>
+        </div>
 
         <label class="field">
           <span class="field__label">默认 Cookie 来源（B 站 1080P+ 与抖音建议选浏览器）</span>
