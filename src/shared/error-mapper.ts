@@ -32,7 +32,8 @@ const ERROR_RULES: Array<{ match: RegExp; code: YtdlpErrorCode; message: string 
     match: /Fresh cookies .* are needed|needs fresh cookies/i,
     code: 'NEED_FRESH_COOKIES',
     message:
-      '该平台要求携带一份新的浏览器 Cookie（未登录也需要）。请在设置里指定浏览器扩展导出的 cookies.txt，或换一个能读取 Cookie 的浏览器后重新解析。',
+      '该平台要求一份"新鲜"的浏览器 Cookie（未登录也需要）：还没配置 cookies.txt 就在设置里指定扩展导出的文件；' +
+      '已配置则说明那份已失效，重新打开该视频页、用扩展重新导出并覆盖旧文件即可（本工具每次请求都会重新读取，不用重启服务）。',
   },
   {
     match:

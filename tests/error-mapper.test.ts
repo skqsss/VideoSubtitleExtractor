@@ -58,6 +58,7 @@ test('抖音要求新鲜 Cookie 时提示配置 cookies.txt', () => {
 
   assert.equal(mapped.code, 'NEED_FRESH_COOKIES')
   assert.match(mapped.message, /cookies\.txt/)
+  assert.match(mapped.message, /重新导出/)
 })
 
 test('浏览器没有 Cookie 数据库时同样归入 Cookie 可读性问题', () => {
