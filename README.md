@@ -137,3 +137,30 @@ B 站多数视频能拿到 720P / 1080P（个别视频未登录也能到 1080P�
 ## 下一步（不在本期）
 
 转写与翻译：任务对象已保留 `outputPath`，下一期接 `faster-whisper` / `FunASR` 与大模型翻译，输出 srt / ass 软字幕与硬字幕版本。
+
+## 打包桌面端（Electron）
+
+```powershell
+npm run build:win     # 构建前端 + 主进程，再产出 release/ 下的两个 exe
+```
+
+产物：
+
+- `release\视频解析下载器-便携版-0.1.0.exe`：免安装，双击即用
+- `release\视频分辨率解析下载器 Setup 0.1.0.exe`：NSIS 安装包，可改安装目录、建桌面快捷方式
+- `release\win-unpacked\`：未封装的目录版，调试用，可直接运行里面的 exe
+
+打包后的数据位置（首次启动自动创建）：
+
+| 内容 | 位置 |
+| --- | --- |
+| 配置 | `%APPDATA%\videosubtitleextractor\config.json` |
+| 外部二进制 | `%APPDATA%\videosubtitleextractor\bin\`（首次运行从 `resources\bin` 复制，**不需要再下载 yt-dlp / ffmpeg**） |
+| Cookie 合并缓存 | `%APPDATA%\videosubtitleextractor\cache\yt-dlp-cookies.txt` |
+
+实现要点：
+
+- 桌面版把本地服务直接跑在 Electron 主进程里，窗口只加载 `http://127.0.0.1:<端口>`；配置端口被占用时自动退回随机空闲端口，保证双击一定能起来。
+- 单实例锁：重复双击只聚焦已有窗口；退出时会终止所有 yt-dlp / ffmpeg 子进程，实测无残留。
+- 未做代码签名，首次运行会出现 SmartScreen 提示，点"仍要运行"即可（个人自用可接受）。
+- 打包若遇到 `EPERM: rename win-unpacked.tmp`（杀软或索引占用解压目录），本配置已通过 `electronDist` 复用本地 Electron 分发版绕开下载解包那一步。
