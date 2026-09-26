@@ -12,6 +12,7 @@ import {
   DOWNLOAD_PRESETS,
   buildFormatArgs,
   buildFormatSelector,
+  dedupeFormats,
   formatBitrate,
   formatBytes,
   formatDuration,
@@ -146,6 +147,35 @@ test('刻度占比落在 8~100 之间，最高档位为 100', () => {
   assert.ok((tiny?.rulerPercent ?? 0) >= 8)
   assert.ok(result.audioFormats[0] !== undefined)
   assert.ok((result.audioFormats[0]?.rulerPercent ?? 0) >= 8)
+})
+
+test('同清晰度的多线路档位会被合并成一条', () => {
+  // 抖音会把同一档位按 CDN 线路列成 -0/-1/-2/-3，除了 format_id 完全一致
+  const raw = {
+    formats: [
+      { format_id: 'bytevc1_720p_1111404-0', ext: 'mp4', width: 720, height: 1280, fps: 30, vcodec: 'h265', acodec: 'aac', tbr: 1111, filesize: 2380767 },
+      { format_id: 'bytevc1_720p_1111404-1', ext: 'mp4', width: 720, height: 1280, fps: 30, vcodec: 'h265', acodec: 'aac', tbr: 1111, filesize: 2380767 },
+      { format_id: 'bytevc1_720p_1111404-2', ext: 'mp4', width: 720, height: 1280, fps: 30, vcodec: 'h265', acodec: 'aac', tbr: 1111, filesize: 2380767 },
+      { format_id: 'bytevc1_540p_846388-0', ext: 'mp4', width: 576, height: 1024, fps: 30, vcodec: 'h265', acodec: 'aac', tbr: 846, filesize: 1813071 },
+    ],
+  }
+
+  const result = normalizeProbeInfo(raw)
+
+  assert.deepEqual(
+    result.formats.map((item) => item.formatId),
+    ['bytevc1_720p_1111404-0', 'bytevc1_540p_846388-0'],
+  )
+})
+
+test('分辨率或编码不同的档位不会被误合并', () => {
+  const formats = [
+    createFormat({ formatId: 'a', height: 1080, vcodec: 'avc1' }),
+    createFormat({ formatId: 'b', height: 1080, vcodec: 'hev1' }),
+    createFormat({ formatId: 'c', height: 720 }),
+  ]
+
+  assert.equal(dedupeFormats(formats).length, 3)
 })
 
 test('缺少分辨率时高度为 null 且展示为仅音频', () => {

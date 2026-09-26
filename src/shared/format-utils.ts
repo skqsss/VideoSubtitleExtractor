@@ -217,7 +217,7 @@ function clampPercent(value: number): number {
  * 归一化 yt-dlp -J 返回的 info
  * @param info - yt-dlp 原始 JSON
  * @returns 前端可直接渲染的解析结果
- * @remarks 会过滤故事板格式，并把视频档、音频档分开排序
+ * @remarks 会过滤故事板格式、合并完全相同的档位，并把视频档、音频档分开排序
  */
 export function normalizeProbeInfo(info: RawYtdlpInfo): {
   title: string
@@ -247,12 +247,16 @@ export function normalizeProbeInfo(info: RawYtdlpInfo): {
     0,
   )
 
-  const formats = rawVideoFormats
-    .map((raw) => normalizeFormat(raw, computeRulerPercent(raw, maxHeight, maxBitrate)))
-    .sort(compareFormats)
-  const audioFormats = rawAudioFormats
-    .map((raw) => normalizeFormat(raw, computeRulerPercent(raw, maxHeight, maxBitrate)))
-    .sort(compareFormats)
+  const formats = dedupeFormats(
+    rawVideoFormats.map((raw) =>
+      normalizeFormat(raw, computeRulerPercent(raw, maxHeight, maxBitrate)),
+    ),
+  ).sort(compareFormats)
+  const audioFormats = dedupeFormats(
+    rawAudioFormats.map((raw) =>
+      normalizeFormat(raw, computeRulerPercent(raw, maxHeight, maxBitrate)),
+    ),
+  ).sort(compareFormats)
 
   return {
     title: info.title ?? '未命名视频',
@@ -283,6 +287,41 @@ function compareFormats(left: VideoFormat, right: VideoFormat): number {
   }
 
   return left.formatId.localeCompare(right.formatId)
+}
+
+/**
+ * 合并描述完全相同的档位
+ * @param formats - 归一化后的档位列表
+ * @returns 去重后的列表，保留每个组合中第一个出现的档位
+ * @remarks 部分平台（如抖音）会把同一清晰度的多个 CDN 线路各列一条，
+ * 表格里会出现 4 倍重复行。这些档位的容器、分辨率、帧率、编码、码率、
+ * 体积完全一致，观看效果相同，因此只保留一条，避免表格被噪声淹没
+ */
+export function dedupeFormats(formats: VideoFormat[]): VideoFormat[] {
+  const seen = new Set<string>()
+  const result: VideoFormat[] = []
+
+  for (const format of formats) {
+    const signature = [
+      format.ext,
+      format.width ?? '',
+      format.height ?? '',
+      format.fps === null ? '' : Math.round(format.fps),
+      format.vcodec,
+      format.acodec,
+      format.tbr === null ? '' : Math.round(format.tbr),
+      format.filesize ?? '',
+    ].join('|')
+
+    if (seen.has(signature)) {
+      continue
+    }
+
+    seen.add(signature)
+    result.push(format)
+  }
+
+  return result
 }
 
 /**
