@@ -9,6 +9,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { ApiError, api } from '../api/client.ts'
+import { extractVideoUrl } from '../shared/url-utils.ts'
 import type { CookieBrowser, ProbeResult } from '../types.ts'
 
 export const useProbeStore = defineStore('probe', () => {
@@ -40,13 +41,16 @@ export const useProbeStore = defineStore('probe', () => {
       return false
     }
 
-    const url = inputUrl.value.trim()
-    if (!url) {
+    const rawInput = inputUrl.value.trim()
+    if (!rawInput) {
       error.value = '请先粘贴视频链接。'
       errorCode.value = 'EMPTY_URL'
 
       return false
     }
+
+    // 允许整段分享文案：先抠出链接再发起解析，失败时把原文交给服务端给出更准确的提示
+    const url = extractVideoUrl(rawInput) ?? rawInput
 
     isLoading.value = true
     error.value = ''
