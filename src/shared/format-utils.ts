@@ -420,3 +420,26 @@ export function formatCodec(codec: string): string {
 
   return codec.split('.')[0] ?? codec
 }
+
+/**
+ * 把 yt-dlp 的备注转成界面上好懂的中文
+ * @param note - format_note 原文（一般是英文）
+ * @returns 展示用文本，未识别的备注原样返回
+ * @remarks 抖音会把同一视频列成"直连播放源"和"API 下载源"两套，
+ * 后者带水印，提示必须让用户看得懂，否则容易下错
+ */
+export function formatNoteText(note: string): string {
+  if (!note) {
+    return ''
+  }
+
+  if (/watermark/i.test(note)) {
+    return '含水印'
+  }
+
+  if (/direct video/i.test(note)) {
+    return '直连源（无水印）'
+  }
+
+  return note
+}

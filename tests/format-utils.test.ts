@@ -16,6 +16,7 @@ import {
   formatBitrate,
   formatBytes,
   formatDuration,
+  formatNoteText,
   formatResolution,
   normalizeProbeInfo,
   type RawYtdlpInfo,
@@ -176,6 +177,13 @@ test('分辨率或编码不同的档位不会被误合并', () => {
   ]
 
   assert.equal(dedupeFormats(formats).length, 3)
+})
+
+test('抖音的备注能翻译成看得懂的中文', () => {
+  assert.equal(formatNoteText('Download video, watermarked (API)'), '含水印')
+  assert.equal(formatNoteText('Direct video (API)'), '直连源（无水印）')
+  assert.equal(formatNoteText('1080P 高清'), '1080P 高清')
+  assert.equal(formatNoteText(''), '')
 })
 
 test('缺少分辨率时高度为 null 且展示为仅音频', () => {

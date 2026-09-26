@@ -10,6 +10,7 @@ import {
   formatBitrate,
   formatBytes,
   formatCodec,
+  formatNoteText,
   formatResolution,
 } from '../shared/format-utils.ts'
 import { useFormatFilter, type FormatFilter, type FormatSortKey } from '../composables/use-format-filter.ts'
@@ -105,7 +106,9 @@ function onSort(key: FormatSortKey): void {
           </td>
           <td data-label="分辨率" class="mono">
             {{ formatResolution(format) }}
-            <span v-if="format.note" class="format-table__note">{{ format.note }}</span>
+            <span v-if="format.note" class="format-table__note" :title="format.note">
+              {{ formatNoteText(format.note) }}
+            </span>
           </td>
           <td data-label="帧率" class="mono">{{ format.fps ? format.fps.toFixed(0) : '—' }}</td>
           <td data-label="编码" class="mono">
