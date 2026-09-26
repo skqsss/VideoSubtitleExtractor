@@ -1,7 +1,8 @@
 /**
  * @file 配置读写
  * @author Codex
- * @description 网页版配置存项目根 config.json，相对路径统一按项目根解析
+ * @description 网页版配置存项目根 config.json，桌面版改存 userData；
+ * 根目录、配置文件路径与默认值都可由 Electron 主进程覆盖，其他层不感知运行形态
  * @date 2026-09-26
  */
 
@@ -11,11 +12,17 @@ import path from 'node:path'
 import type { AppConfig, CookieBrowser } from '../shared/types.ts'
 import { logger } from './logger.ts'
 
-/** 项目根目录（src/server 的上两级） */
-export const PROJECT_ROOT = path.resolve(import.meta.dirname, '..', '..')
+/** 项目根目录：开发态按源码位置推导，打包态由主进程覆盖成应用目录 */
+let projectRoot = path.resolve(import.meta.dirname, '..', '..')
 
-/** 配置文件路径 */
-const CONFIG_PATH = path.join(PROJECT_ROOT, 'config.json')
+/** 配置文件路径：开发态在项目根，桌面版在 userData */
+let configPath = path.join(projectRoot, 'config.json')
+
+/** 可写数据目录：存放合并后的 Cookie 等运行时产物（打包态不在只读的 asar 里） */
+let dataDir = projectRoot
+
+/** 打包态由主进程写入的默认值补丁（二进制路径、下载目录等） */
+let defaultConfigPatch: Partial<AppConfig> = {}
 
 /** 允许的 Cookie 浏览器取值 */
 const COOKIE_BROWSERS: CookieBrowser[] = [
@@ -51,30 +58,91 @@ export const DEFAULT_CONFIG: AppConfig = {
 }
 
 /**
+ * 覆盖项目根目录
+ * @param dir - 新的根目录（打包态为 asar 所在的应用目录）
+ */
+export function setProjectRoot(dir: string): void {
+  projectRoot = dir
+  configPath = path.join(dir, 'config.json')
+}
+
+/**
+ * 覆盖配置文件路径
+ * @param file - 配置文件绝对路径（桌面版指向 userData）
+ */
+export function setConfigPath(file: string): void {
+  configPath = file
+}
+
+/**
+ * 覆盖可写数据目录
+ * @param dir - 目录绝对路径（桌面版指向 userData）
+ */
+export function setDataDir(dir: string): void {
+  dataDir = dir
+}
+
+/**
+ * 读取可写数据目录
+ * @returns 当前生效的数据目录
+ */
+export function getDataDir(): string {
+  return dataDir
+}
+
+/**
+ * 写入默认配置补丁
+ * @param patch - 需要覆盖的默认字段，例如打包后二进制的绝对路径
+ * @remarks 只在首次生成 config.json 时生效，已有配置不会被改写
+ */
+export function setDefaultConfigPatch(patch: Partial<AppConfig>): void {
+  defaultConfigPatch = { ...defaultConfigPatch, ...patch }
+}
+
+/**
+ * 读取项目根目录
+ * @returns 当前生效的根目录
+ */
+export function getProjectRoot(): string {
+  return projectRoot
+}
+
+/**
+ * 读取生效的默认配置
+ * @returns 合并了补丁的默认配置
+ */
+function getDefaultConfig(): AppConfig {
+  return { ...DEFAULT_CONFIG, ...defaultConfigPatch }
+}
+
+/**
  * 读取配置文件，不存在时写入默认值
  * @returns 合并默认值后的配置
  * @remarks 文件损坏或字段非法时回退默认值，保证服务能启动
  */
 export function loadConfig(): AppConfig {
-  if (!fs.existsSync(CONFIG_PATH)) {
-    writeConfigFile(DEFAULT_CONFIG)
-    logger.info('config', '未找到配置文件，已生成默认配置', { path: CONFIG_PATH })
+  const fallback = getDefaultConfig()
 
-    return { ...DEFAULT_CONFIG }
+  if (!fs.existsSync(configPath)) {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    writeConfigFile(fallback)
+    logger.info('config', '未找到配置文件，已生成默认配置', { path: configPath })
+
+    return { ...fallback }
   }
 
   try {
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8')
+    const raw = fs.readFileSync(configPath, 'utf8')
     const parsed = JSON.parse(raw) as Partial<AppConfig>
 
-    return sanitizeConfig({ ...DEFAULT_CONFIG, ...parsed })
+    return sanitizeConfig({ ...fallback, ...parsed })
   } catch (error) {
     logger.warn('config', '配置文件解析失败，回退默认配置', {
-      path: CONFIG_PATH,
+      path: configPath,
       reason: (error as Error).message,
     })
 
-    return { ...DEFAULT_CONFIG }
+    return { ...fallback }
   }
 }
 
@@ -101,7 +169,7 @@ export function saveConfig(patch: Partial<AppConfig>): AppConfig {
  * @param config - 完整配置
  */
 function writeConfigFile(config: AppConfig): void {
-  fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
+  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
 }
 
 /**
@@ -140,7 +208,7 @@ function sanitizeConfig(config: AppConfig): AppConfig {
  * @returns 绝对路径
  */
 export function resolveProjectPath(target: string): string {
-  return path.isAbsolute(target) ? path.normalize(target) : path.join(PROJECT_ROOT, target)
+  return path.isAbsolute(target) ? path.normalize(target) : path.join(projectRoot, target)
 }
 
 /**

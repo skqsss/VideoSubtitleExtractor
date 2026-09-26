@@ -15,7 +15,7 @@ import { ZodError } from 'zod'
 
 import type { ApiErrorBody, AppConfig } from '../shared/types.ts'
 import { checkHealth, updateYtdlp } from './binary-service.ts'
-import { PROJECT_ROOT } from './config.ts'
+import { getProjectRoot } from './config.ts'
 import { inspectCookies } from './cookie-service.ts'
 import { YtdlpError } from './errors.ts'
 import { logger } from './logger.ts'
@@ -29,8 +29,13 @@ const LISTEN_HOST = '127.0.0.1'
 /** SSE 心跳间隔，避免代理或浏览器提前断开 */
 const SSE_HEARTBEAT_MS = 20_000
 
-/** 前端构建产物目录 */
-const RENDERER_DIST = path.join(PROJECT_ROOT, 'dist')
+/**
+ * 读取前端构建产物目录
+ * @returns 打包态指向 asar 内的 dist，开发态指向项目根 dist
+ */
+function getRendererDist(): string {
+  return path.join(getProjectRoot(), 'dist')
+}
 
 /** 服务运行上下文 */
 export interface ServerContext {
@@ -45,9 +50,13 @@ export interface ServerContext {
 /**
  * 启动 HTTP 服务
  * @param context - 服务运行上下文
+ * @param options - 可选覆盖项，port 传 0 表示由系统分配空闲端口（桌面版用）
  * @returns Fastify 实例
  */
-export async function startHttpServer(context: ServerContext): Promise<FastifyInstance> {
+export async function startHttpServer(
+  context: ServerContext,
+  options: { port?: number } = {},
+): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, bodyLimit: 1_048_576 })
 
   // 取消、定位文件这类接口没有请求体，浏览器/PowerShell 可能不带任何 content-type，
@@ -63,11 +72,22 @@ export async function startHttpServer(context: ServerContext): Promise<FastifyIn
   registerTaskRoutes(app, context)
   await registerStaticRoutes(app)
 
-  const port = context.getConfig().port
+  const port = options.port ?? context.getConfig().port
   await app.listen({ host: LISTEN_HOST, port })
-  logger.info('http-server', '服务已启动', { host: LISTEN_HOST, port })
+  logger.info('http-server', '服务已启动', { host: LISTEN_HOST, port: getListeningPort(app) })
 
   return app
+}
+
+/**
+ * 读取实际监听端口
+ * @param app - Fastify 实例
+ * @returns 端口号，未监听时返回 0
+ */
+export function getListeningPort(app: FastifyInstance): number {
+  const address = app.server.address()
+
+  return typeof address === 'object' && address ? address.port : 0
 }
 
 /**
@@ -254,8 +274,9 @@ function streamTaskEvents(
  * @param app - Fastify 实例
  */
 async function registerStaticRoutes(app: FastifyInstance): Promise<void> {
-  if (fs.existsSync(RENDERER_DIST)) {
-    await app.register(fastifyStatic, { root: RENDERER_DIST, prefix: '/' })
+  const rendererDist = getRendererDist()
+  if (fs.existsSync(rendererDist)) {
+    await app.register(fastifyStatic, { root: rendererDist, prefix: '/' })
     app.setNotFoundHandler((request, reply) => {
       if (request.url.startsWith('/api/')) {
         reply.status(404).send(buildErrorBody('NOT_FOUND', '接口不存在'))

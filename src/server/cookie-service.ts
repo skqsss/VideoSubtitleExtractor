@@ -11,14 +11,19 @@ import path from 'node:path'
 
 import { mergeCookieContents, type CookieSummary } from '../shared/cookie-utils.ts'
 import type { CookieInspectResult } from '../shared/types.ts'
-import { PROJECT_ROOT, resolveProjectPath } from './config.ts'
+import { getDataDir, resolveProjectPath } from './config.ts'
 import { logger } from './logger.ts'
 
-/** 合并结果缓存目录（与配置、下载目录分开，避免混进用户文件） */
-const CACHE_DIR = path.join(PROJECT_ROOT, 'cache')
+/** 缓存目录名：放在可写数据目录下，打包后不会落进只读的 asar */
+const CACHE_DIR_NAME = 'cache'
 
-/** 合并后的临时 Cookie 文件路径，只在本机使用 */
-const MERGED_COOKIE_PATH = path.join(CACHE_DIR, 'yt-dlp-cookies.txt')
+/**
+ * 读取合并后的 Cookie 缓存路径
+ * @returns 缓存文件绝对路径
+ */
+function getMergedCookiePath(): string {
+  return path.join(getDataDir(), CACHE_DIR_NAME, 'yt-dlp-cookies.txt')
+}
 
 /** 目录形式的配置里认这几种扩展名：Netscape 文本与扩展导出的 JSON */
 const COOKIE_FILE_EXTENSIONS = ['.txt', '.json']
@@ -126,15 +131,16 @@ export function prepareCookiesFile(cookiesFile: string): string {
   assertCookiesFilesExist(files)
   const merged = mergeCookiesFiles(files)
 
-  fs.mkdirSync(CACHE_DIR, { recursive: true })
-  fs.writeFileSync(MERGED_COOKIE_PATH, merged.content, 'utf8')
+  const mergedCookiePath = getMergedCookiePath()
+  fs.mkdirSync(path.dirname(mergedCookiePath), { recursive: true })
+  fs.writeFileSync(mergedCookiePath, merged.content, 'utf8')
   logger.info('cookie-service', 'Cookie 已合并', {
     fileCount: merged.summary.fileCount,
     cookieCount: merged.summary.cookieCount,
     domains: merged.summary.domains,
   })
 
-  return MERGED_COOKIE_PATH
+  return mergedCookiePath
 }
 
 /**
