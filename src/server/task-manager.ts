@@ -23,16 +23,15 @@ import type {
 } from '../shared/types.ts'
 import {
   ensureDownloadDir,
-  resolveCookiesFile,
   resolveFfmpegDir,
   resolveYtdlpPath,
 } from './config.ts'
+import { prepareCookiesFile } from './cookie-service.ts'
+import { YtdlpError } from './errors.ts'
 import { logger } from './logger.ts'
 import { runCommand } from './process-runner.ts'
 import {
   PROGRESS_LINE_MARKER,
-  YtdlpError,
-  assertCookiesFileExists,
   buildCommonArgs,
   buildFfmpegArgs,
   buildOutputArgs,
@@ -42,6 +41,7 @@ import {
   getCachedProbe,
   inferTitleFromPath,
   normalizeVideoUrl,
+  resolveEffectiveCookieBrowser,
 } from './ytdlp-service.ts'
 
 /** 原始日志保留行数，够定位问题又不至于占内存 */
@@ -156,7 +156,8 @@ export class TaskManager {
   createTask(params: StartTaskParams): DownloadTask {
     const config = this.getConfig()
     const url = normalizeVideoUrl(params.url)
-    assertCookiesFileExists(resolveCookiesFile(config))
+    // 提前校验 Cookie 配置，避免任务排队后才失败
+    resolveTaskCookiesFile(config)
     const cachedProbe = getCachedProbe(url)
     const format = params.mode === 'format' ? this.resolveFormat(url, params) : undefined
     const preset = DOWNLOAD_PRESETS.find((item) => item.mode === params.mode)
@@ -320,8 +321,14 @@ export class TaskManager {
   private async runTask(task: DownloadTask): Promise<void> {
     try {
       const config = this.getConfig()
-      const cookieBrowser = this.taskRequests.get(task.id)?.cookieBrowser ?? config.cookieBrowser
-      let useBrowserCookies = cookieBrowser !== 'none'
+      const taskRequest = this.taskRequests.get(task.id)
+      const cookiesFile = resolveTaskCookiesFile(config)
+      let useBrowserCookies =
+        resolveEffectiveCookieBrowser(
+          taskRequest?.cookieBrowser,
+          config.cookieBrowser,
+          Boolean(cookiesFile),
+        ) !== 'none'
 
       for (let attempt = 0; attempt < MAX_DOWNLOAD_ATTEMPTS; attempt += 1) {
         const outcome = await this.spawnAttempt(task, useBrowserCookies)
@@ -378,6 +385,7 @@ export class TaskManager {
     const downloadDir = ensureDownloadDir(config)
     const ffmpegDir = resolveFfmpegDir(config)
     const taskRequest = this.taskRequests.get(task.id)
+    const cookiesFile = resolveTaskCookiesFile(config)
     const emptyOutcome = { code: null, output: '', canceled: false, destinationPaths: new Set<string>() }
 
     let args: string[]
@@ -391,7 +399,7 @@ export class TaskManager {
         ...buildCommonArgs(
           useBrowserCookies ? (taskRequest?.cookieBrowser ?? config.cookieBrowser) : 'none',
           taskRequest?.proxy ?? config.proxy,
-          resolveCookiesFile(config),
+          cookiesFile,
         ),
         task.url,
       ]
@@ -708,6 +716,20 @@ export class TaskManager {
    */
   private buildLog(taskId: string): string {
     return (this.logLines.get(taskId) ?? []).join('\n')
+  }
+}
+
+/**
+ * 取出本次下载要用的 Cookie 文件（多个来源已合并成一个）
+ * @param config - 应用配置
+ * @returns 合并后文件的绝对路径，未配置时返回空字符串
+ * @throws YtdlpError Cookie 路径不存在或内容不可解析时抛出
+ */
+function resolveTaskCookiesFile(config: AppConfig): string {
+  try {
+    return prepareCookiesFile(config.cookiesFile)
+  } catch (error) {
+    throw new YtdlpError('COOKIE_FILE_MISSING', (error as Error).message)
   }
 }
 

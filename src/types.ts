@@ -9,6 +9,7 @@ export type {
   AppConfig,
   ApiErrorBody,
   CookieBrowser,
+  CookieInspectResult,
   DownloadMode,
   DownloadTask,
   HealthResult,

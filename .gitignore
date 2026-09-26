@@ -41,5 +41,6 @@ __screenshots__/
 # 项目本地资源与产物
 bin/
 downloads/
+cache/
 config.json
 release/

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { mapYtdlpError, shouldRetryWithoutCookies } from '../src/shared/error-mapper.ts'
+import { resolveEffectiveCookieBrowser } from '../src/server/ytdlp-service.ts'
 
 test('需要登录时提示选择浏览器读取 Cookie', () => {
   const mapped = mapYtdlpError('ERROR: Sign in to confirm you are not a bot', 1)
@@ -84,6 +85,17 @@ test('Cookie 读不出来时允许丢掉 Cookie 重试，平台要求新鲜 Cook
   // 未归类但输出里出现 cookie 时，仍给一次不带 Cookie 的机会
   assert.equal(shouldRetryWithoutCookies('UNKNOWN', 'Something about cookie went wrong'), true)
   assert.equal(shouldRetryWithoutCookies('UNKNOWN', 'plain network failure'), false)
+})
+
+test('配了 cookies.txt 就不再默认读浏览器 Cookie，显式选择时两者都用', () => {
+  // 跟随设置 + 有 Cookie 文件 → 不读浏览器，省掉必然失败的 2 秒
+  assert.equal(resolveEffectiveCookieBrowser(undefined, 'edge', true), 'none')
+  // 跟随设置 + 没有 Cookie 文件 → 用配置里的浏览器
+  assert.equal(resolveEffectiveCookieBrowser(undefined, 'edge', false), 'edge')
+  // 界面上明确选了浏览器 → 尊重选择
+  assert.equal(resolveEffectiveCookieBrowser('chrome', 'edge', true), 'chrome')
+  // 界面上明确选了不读取
+  assert.equal(resolveEffectiveCookieBrowser('none', 'edge', true), 'none')
 })
 
 test('解析阶段无法归类时措辞不写成下载失败', () => {

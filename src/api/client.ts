@@ -8,6 +8,7 @@
 import type {
   ApiErrorBody,
   AppConfig,
+  CookieInspectResult,
   DownloadTask,
   HealthResult,
   ProbeParams,
@@ -108,6 +109,14 @@ export const api = {
    */
   updateYtdlp(): Promise<{ version: string }> {
     return request<{ version: string }>('/ytdlp/update', { method: 'POST', body: '{}' })
+  },
+
+  /**
+   * 自检 cookies.txt 配置
+   * @returns Cookie 条数与覆盖的域名
+   */
+  inspectCookies(): Promise<CookieInspectResult> {
+    return request<CookieInspectResult>('/cookies/inspect')
   },
 
   /**

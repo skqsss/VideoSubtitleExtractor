@@ -162,15 +162,6 @@ export function resolveFfmpegDir(config: AppConfig): string {
 }
 
 /**
- * 解析 cookies.txt 路径
- * @param config - 配置
- * @returns 绝对路径，未配置时返回空字符串
- */
-export function resolveCookiesFile(config: AppConfig): string {
-  return config.cookiesFile ? resolveProjectPath(config.cookiesFile) : ''
-}
-
-/**
  * 解析下载目录并确保目录存在
  * @param config - 配置
  * @returns 绝对路径

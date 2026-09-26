@@ -6,24 +6,25 @@
  */
 
 import path from 'node:path'
-import fs from 'node:fs'
 
 import {
   mapYtdlpError,
   shouldRetryWithoutCookies,
   type MappedYtdlpError,
-  type YtdlpErrorCode,
 } from '../shared/error-mapper.ts'
 import { normalizeProbeInfo, type RawYtdlpInfo } from '../shared/format-utils.ts'
 import { extractVideoUrl } from '../shared/url-utils.ts'
 import type {
   AppConfig,
+  CookieBrowser,
   DownloadMode,
   ProbeParams,
   ProbeResult,
   VideoFormat,
 } from '../shared/types.ts'
-import { resolveCookiesFile, resolveYtdlpPath } from './config.ts'
+import { resolveYtdlpPath } from './config.ts'
+import { prepareCookiesFile } from './cookie-service.ts'
+import { YtdlpError } from './errors.ts'
 import { logger } from './logger.ts'
 import { runCommand } from './process-runner.ts'
 
@@ -40,20 +41,7 @@ const PROBE_CACHE_LIMIT = 20
  */
 export const PROGRESS_LINE_MARKER = 'VFPROGRESS:'
 
-/** 带错误码的业务异常，HTTP 层据此返回 { error: { code, message } } */
-export class YtdlpError extends Error {
-  readonly code: YtdlpErrorCode
-
-  /**
-   * @param code - 错误码，供前端分支判断
-   * @param message - 中文提示
-   */
-  constructor(code: YtdlpErrorCode, message: string) {
-    super(message)
-    this.name = 'YtdlpError'
-    this.code = code
-  }
-}
+export { YtdlpError } from './errors.ts'
 
 /** 最近一次解析结果缓存：key 为链接，value 为归一化后的结果 */
 const probeCache = new Map<string, ProbeResult>()
@@ -124,17 +112,39 @@ export function buildCommonArgs(
 }
 
 /**
- * 校验 cookies.txt 是否存在
- * @param cookiesFile - cookies.txt 绝对路径，空字符串表示未配置
- * @throws YtdlpError 配置了路径但文件不存在时抛出
- * @remarks 提前失败，避免把"文件不存在"混进一堆 yt-dlp 报错里
+ * 计算本次真正生效的 Cookie 浏览器
+ * @param paramsBrowser - 界面上显式选择的浏览器，未选择时为 undefined
+ * @param configuredBrowser - 配置里的默认浏览器
+ * @param hasCookieFile - 是否配置了 cookies.txt
+ * @returns 生效的浏览器标识
+ * @remarks 配了 cookies.txt 就不再默认去读浏览器：Chrome/Edge 新版加密下这一步必然失败，
+ * 白白多花两秒并留下一条容易误导的提示；用户显式选浏览器时才两者一起用
  */
-export function assertCookiesFileExists(cookiesFile: string): void {
-  if (cookiesFile && !fs.existsSync(cookiesFile)) {
-    throw new YtdlpError(
-      'COOKIE_FILE_MISSING',
-      `设置的 cookies.txt 不存在：${cookiesFile}，请在设置里重新指定或清空该项。`,
-    )
+export function resolveEffectiveCookieBrowser(
+  paramsBrowser: CookieBrowser | undefined,
+  configuredBrowser: CookieBrowser,
+  hasCookieFile: boolean,
+): CookieBrowser {
+  if (paramsBrowser) {
+    return paramsBrowser
+  }
+
+  return hasCookieFile ? 'none' : configuredBrowser
+}
+
+/**
+ * 取出本次解析要用的 Cookie 文件（多个来源已合并成一个）
+ * @param params - 解析参数
+ * @param config - 应用配置
+ * @returns 合并后文件的绝对路径，未配置时返回空字符串
+ * @throws YtdlpError Cookie 路径不存在或内容不可解析时抛出
+ * @remarks 合并失败属于用户可修的配置问题，转成带错误码的业务异常，界面上给中文指引
+ */
+export function resolveProbeCookiesFile(params: ProbeParams, config: AppConfig): string {
+  try {
+    return prepareCookiesFile(params.cookiesFile ?? config.cookiesFile)
+  } catch (error) {
+    throw new YtdlpError('COOKIE_FILE_MISSING', (error as Error).message)
   }
 }
 
@@ -161,14 +171,18 @@ export async function probeVideo(
 ): Promise<ProbeResult> {
   const url = normalizeVideoUrl(params.url)
   const ytdlpPath = resolveYtdlpPath(config)
-  const cookieBrowser = params.cookieBrowser ?? config.cookieBrowser
   const proxy = params.proxy ?? config.proxy
-  const cookiesFile = params.cookiesFile ?? resolveCookiesFile(config)
-  assertCookiesFileExists(cookiesFile)
+  const cookiesFile = resolveProbeCookiesFile(params, config)
+  const cookieBrowser = resolveEffectiveCookieBrowser(
+    params.cookieBrowser,
+    config.cookieBrowser,
+    Boolean(cookiesFile),
+  )
 
   logger.info('ytdlp-service', '开始解析链接', {
     host: new URL(url).host,
     hasCookie: cookieBrowser !== 'none',
+    hasCookieFile: Boolean(cookiesFile),
     hasProxy: Boolean(proxy),
   })
 

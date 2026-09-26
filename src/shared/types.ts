@@ -166,6 +166,22 @@ export interface HealthResult {
   message: string
 }
 
+/** Cookie 配置自检结果，用于确认导出的 cookies.txt 是否可用 */
+export interface CookieInspectResult {
+  /** 是否解析到有效 Cookie */
+  ok: boolean
+  /** 参与合并的文件数量 */
+  fileCount: number
+  /** 去重后的 Cookie 条数 */
+  cookieCount: number
+  /** Cookie 覆盖的域名 */
+  domains: string[]
+  /** 每个域名下的 Cookie 名，便于确认是否含登录态（如 SESSDATA / ttwid） */
+  namesByDomain: Record<string, string[]>
+  /** 中文说明 */
+  message: string
+}
+
 /** 统一错误结构 */
 export interface ApiErrorBody {
   error: {

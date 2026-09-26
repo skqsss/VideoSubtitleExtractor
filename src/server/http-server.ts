@@ -16,10 +16,12 @@ import { ZodError } from 'zod'
 import type { ApiErrorBody, AppConfig } from '../shared/types.ts'
 import { checkHealth, updateYtdlp } from './binary-service.ts'
 import { PROJECT_ROOT } from './config.ts'
+import { inspectCookies } from './cookie-service.ts'
+import { YtdlpError } from './errors.ts'
 import { logger } from './logger.ts'
 import { configSchema, probeSchema, startTaskSchema } from './schemas.ts'
 import type { TaskManager } from './task-manager.ts'
-import { YtdlpError, probeVideo } from './ytdlp-service.ts'
+import { probeVideo } from './ytdlp-service.ts'
 
 /** 仅监听回环地址，不对局域网开放 */
 const LISTEN_HOST = '127.0.0.1'
@@ -133,6 +135,8 @@ function registerConfigRoutes(app: FastifyInstance, context: ServerContext): voi
 
     return { version }
   })
+
+  app.get('/api/cookies/inspect', async () => inspectCookies(context.getConfig().cookiesFile))
 }
 
 /**

@@ -9,7 +9,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
 import { ApiError, api } from '../api/client.ts'
-import type { AppConfig, HealthResult } from '../types.ts'
+import type { AppConfig, CookieInspectResult, HealthResult } from '../types.ts'
 
 export const useConfigStore = defineStore('config', () => {
   /** 当前配置 */
@@ -26,6 +26,10 @@ export const useConfigStore = defineStore('config', () => {
   const isSettingsOpen = ref(false)
   /** 最近一次操作的中文提示 */
   const notice = ref('')
+  /** Cookie 自检结果 */
+  const cookieSummary = ref<CookieInspectResult | null>(null)
+  /** 是否正在自检 Cookie */
+  const isInspectingCookies = ref(false)
 
   /** 环境是否就绪 */
   const isReady = computed(() => health.value?.ok === true)
@@ -107,6 +111,30 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  /**
+   * 自检 cookies.txt：确认导出文件能被解析、覆盖了哪些域名
+   * @returns 无返回值
+   * @remarks 结果只通过 cookieSummary 呈现，避免和设置面板的 notice 重复显示同一句话
+   */
+  async function inspectCookies(): Promise<void> {
+    isInspectingCookies.value = true
+
+    try {
+      cookieSummary.value = await api.inspectCookies()
+    } catch (error) {
+      cookieSummary.value = {
+        ok: false,
+        fileCount: 0,
+        cookieCount: 0,
+        domains: [],
+        namesByDomain: {},
+        message: error instanceof ApiError ? error.message : 'Cookie 自检失败。',
+      }
+    } finally {
+      isInspectingCookies.value = false
+    }
+  }
+
   return {
     config,
     health,
@@ -115,10 +143,13 @@ export const useConfigStore = defineStore('config', () => {
     isUpdatingYtdlp,
     isSettingsOpen,
     notice,
+    cookieSummary,
+    isInspectingCookies,
     isReady,
     load,
     refreshHealth,
     save,
     updateYtdlp,
+    inspectCookies,
   }
 })

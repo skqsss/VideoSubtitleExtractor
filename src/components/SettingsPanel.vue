@@ -50,6 +50,23 @@ watch(
   { immediate: true },
 )
 
+/** 上次自动自检过的 Cookie 路径，避免重复请求 */
+let lastInspectedCookies = ''
+
+// 打开设置时自动自检一次 Cookie：导出文件是否正确，直接看到结果而不是靠猜
+watch(
+  () => [configStore.isSettingsOpen, configStore.config?.cookiesFile ?? ''] as const,
+  ([isOpen, cookiesFile]) => {
+    if (!isOpen || !cookiesFile || cookiesFile === lastInspectedCookies) {
+      return
+    }
+
+    lastInspectedCookies = cookiesFile
+    void configStore.inspectCookies()
+  },
+  { immediate: true },
+)
+
 /**
  * 保存设置
  * @returns 无返回值
@@ -98,14 +115,18 @@ async function saveSettings(): Promise<void> {
 
         <label class="field">
           <span class="field__label">
-            cookies.txt 路径（可选；Chrome / Edge 新版加密读不到 Cookie 时，用浏览器扩展导出后填这里）
+            cookies.txt 路径（可选：可以是文件、整个文件夹，或用 ; 分隔的多个文件）
           </span>
           <input
             v-model="draft.cookiesFile"
             class="input mono"
             type="text"
-            placeholder="D:\\video-workspace\\cookies.txt"
+            placeholder="D:\\video-workspace\\cookies"
           />
+          <span class="field__hint">
+            浏览器装扩展「Get cookies.txt LOCALLY」，分别在 B 站与抖音页面点导出，把两份文件放进同一个文件夹后填该文件夹即可。
+            填了这里就默认不再读浏览器 Cookie（想两者一起用，请在输入条上显式选择浏览器）。
+          </span>
         </label>
 
         <label class="field">
@@ -147,7 +168,29 @@ async function saveSettings(): Promise<void> {
           >
             {{ configStore.isUpdatingYtdlp ? '更新中…' : '更新 yt-dlp' }}
           </button>
+          <button
+            type="button"
+            class="button"
+            :disabled="configStore.isInspectingCookies"
+            @click="configStore.inspectCookies()"
+          >
+            {{ configStore.isInspectingCookies ? '检查中…' : '检查 Cookie' }}
+          </button>
         </div>
+
+        <p v-if="configStore.cookieSummary" class="settings__cookies detail">
+          <span>{{ configStore.cookieSummary.message }}</span>
+          <span
+            v-for="(names, domain) in configStore.cookieSummary.namesByDomain"
+            :key="domain"
+            class="settings__cookie-domain mono"
+          >
+            {{ domain }}：{{ names.join('、') }}
+          </span>
+          <span v-if="configStore.cookieSummary.ok" class="muted">
+            提示：Cookie 过期或与账号不匹配时，B 站可能只给到 480P，反而比不读取更差。
+          </span>
+        </p>
 
         <p v-if="configStore.notice" class="settings__notice detail">{{ configStore.notice }}</p>
 
@@ -228,6 +271,26 @@ async function saveSettings(): Promise<void> {
   padding-left: 10px;
   border-left: 2px solid var(--color-warn);
   color: var(--color-ink);
+}
+
+.settings__cookies {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-accent);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+.settings__cookie-domain {
+  color: var(--color-ink-soft);
+}
+
+.field__hint {
+  color: var(--color-ink-soft);
+  font-size: var(--font-size-detail);
+  line-height: 1.5;
 }
 
 .settings__health {
