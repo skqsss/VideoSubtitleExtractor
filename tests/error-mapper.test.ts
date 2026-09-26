@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { mapYtdlpError } from '../src/shared/error-mapper.ts'
+import { mapYtdlpError, shouldRetryWithoutCookies } from '../src/shared/error-mapper.ts'
 
 test('需要登录时提示选择浏览器读取 Cookie', () => {
   const mapped = mapYtdlpError('ERROR: Sign in to confirm you are not a bot', 1)
@@ -66,6 +66,24 @@ test('浏览器没有 Cookie 数据库时同样归入 Cookie 可读性问题', (
   )
 
   assert.equal(mapped.code, 'COOKIE_DECRYPT')
+})
+
+test('浏览器运行时数据库被占用也归入 Cookie 可读性问题', () => {
+  const mapped = mapYtdlpError(
+    'ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271',
+    1,
+    'probe',
+  )
+
+  assert.equal(mapped.code, 'COOKIE_DECRYPT')
+})
+
+test('Cookie 读不出来时允许丢掉 Cookie 重试，平台要求新鲜 Cookie 时不允许', () => {
+  assert.equal(shouldRetryWithoutCookies('COOKIE_DECRYPT', ''), true)
+  assert.equal(shouldRetryWithoutCookies('NEED_FRESH_COOKIES', 'fresh cookies'), false)
+  // 未归类但输出里出现 cookie 时，仍给一次不带 Cookie 的机会
+  assert.equal(shouldRetryWithoutCookies('UNKNOWN', 'Something about cookie went wrong'), true)
+  assert.equal(shouldRetryWithoutCookies('UNKNOWN', 'plain network failure'), false)
 })
 
 test('解析阶段无法归类时措辞不写成下载失败', () => {

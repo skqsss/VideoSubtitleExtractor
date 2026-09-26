@@ -10,10 +10,12 @@ import fs from 'node:fs'
 
 import {
   mapYtdlpError,
+  shouldRetryWithoutCookies,
   type MappedYtdlpError,
   type YtdlpErrorCode,
 } from '../shared/error-mapper.ts'
 import { normalizeProbeInfo, type RawYtdlpInfo } from '../shared/format-utils.ts'
+import { extractVideoUrl } from '../shared/url-utils.ts'
 import type {
   AppConfig,
   DownloadMode,
@@ -58,9 +60,10 @@ const probeCache = new Map<string, ProbeResult>()
 
 /**
  * 校验链接是否为 http/https
- * @param url - 用户输入的链接
+ * @param url - 用户输入的链接，允许是"标题 + 链接 + 说明"的整段分享文案
  * @returns 规范化后的链接
  * @throws YtdlpError 链接不合法时抛出
+ * @remarks 先按分享文案抠出链接，再校验协议，前端是否预处理都不影响结果
  */
 export function normalizeVideoUrl(url: string): string {
   const trimmed = url.trim()
@@ -68,9 +71,14 @@ export function normalizeVideoUrl(url: string): string {
     throw new YtdlpError('UNSUPPORTED_URL', '请先粘贴视频链接。')
   }
 
+  const extracted = extractVideoUrl(trimmed)
+  if (!extracted) {
+    throw new YtdlpError('UNSUPPORTED_URL', '这段内容里没找到链接，请粘贴视频详情页的完整网址。')
+  }
+
   let parsed: URL
   try {
-    parsed = new URL(trimmed)
+    parsed = new URL(extracted)
   } catch {
     throw new YtdlpError('UNSUPPORTED_URL', '这不是一个合法链接，请粘贴视频详情页的完整网址。')
   }
@@ -168,9 +176,14 @@ export async function probeVideo(
 
   // 浏览器 Cookie 解密失败是环境问题（Chrome/Edge 新版加密），不该让解析整体失败：
   // 退回未登录状态再试一次，清晰度可能受限，但在界面上给出明确提示
-  if (firstTry.error?.code === 'COOKIE_DECRYPT' && cookieBrowser !== 'none') {
+  if (
+    firstTry.error &&
+    cookieBrowser !== 'none' &&
+    shouldRetryWithoutCookies(firstTry.error.code, firstTry.output)
+  ) {
     logger.warn('ytdlp-service', '读取浏览器 Cookie 失败，改为未登录解析', {
       cookieBrowser,
+      code: firstTry.error.code,
     })
 
     const retry = await runProbe(ytdlpPath, url, {
@@ -203,7 +216,7 @@ async function runProbe(
   ytdlpPath: string,
   url: string,
   options: { cookieBrowser: string; proxy: string; cookiesFile: string },
-): Promise<{ info?: RawYtdlpInfo; error?: MappedYtdlpError }> {
+): Promise<{ info?: RawYtdlpInfo; error?: MappedYtdlpError; output: string }> {
   const args = [
     '-J',
     '--no-warnings',
@@ -216,20 +229,25 @@ async function runProbe(
   })
 
   if (result.timedOut) {
-    return { error: { code: 'NETWORK', message: '解析超时（超过 120 秒）。请检查网络或代理后重试。' } }
+    return {
+      output: result.stderr,
+      error: { code: 'NETWORK', message: '解析超时（超过 120 秒）。请检查网络或代理后重试。' },
+    }
   }
 
+  const output = `${result.stderr}\n${result.stdout}`
   if (result.code !== 0) {
-    const mapped = mapYtdlpError(`${result.stderr}\n${result.stdout}`, result.code, 'probe')
+    const mapped = mapYtdlpError(output, result.code, 'probe')
     logger.warn('ytdlp-service', '解析未成功', { code: mapped.code })
 
-    return { error: mapped }
+    return { output, error: mapped }
   }
 
   try {
-    return { info: JSON.parse(result.stdout) as RawYtdlpInfo }
+    return { output, info: JSON.parse(result.stdout) as RawYtdlpInfo }
   } catch {
     return {
+      output,
       error: { code: 'UNKNOWN', message: 'yt-dlp 返回的内容无法识别，请更新 yt-dlp 后重试。' },
     }
   }

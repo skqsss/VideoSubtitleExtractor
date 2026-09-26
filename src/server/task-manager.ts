@@ -8,7 +8,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import fs from 'node:fs'
 
-import { mapYtdlpError } from '../shared/error-mapper.ts'
+import { mapYtdlpError, shouldRetryWithoutCookies } from '../shared/error-mapper.ts'
 import {
   DOWNLOAD_PRESETS,
   buildFormatArgs,
@@ -348,7 +348,7 @@ export class TaskManager {
         }
 
         const mapped = mapYtdlpError(outcome.output, outcome.code)
-        if (mapped.code === 'COOKIE_DECRYPT' && useBrowserCookies) {
+        if (useBrowserCookies && shouldRetryWithoutCookies(mapped.code, outcome.output)) {
           useBrowserCookies = false
           this.appendLog(task.id, '[本工具] 浏览器 Cookie 读取失败，改为不读取 Cookie 重新下载')
           this.updateTask(task, { warning: COOKIE_FALLBACK_WARNING })

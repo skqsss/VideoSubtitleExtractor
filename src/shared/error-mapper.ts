@@ -35,10 +35,11 @@ const ERROR_RULES: Array<{ match: RegExp; code: YtdlpErrorCode; message: string 
       '该平台要求携带一份新的浏览器 Cookie（未登录也需要）。请在设置里指定浏览器扩展导出的 cookies.txt，或换一个能读取 Cookie 的浏览器后重新解析。',
   },
   {
-    match: /Failed to decrypt with DPAPI|Failed to decrypt|could not decrypt|decrypt.*cookie|could not find .* cookies database|unable to open the cookie jar/i,
+    match:
+      /Failed to decrypt|could not decrypt|Could not copy .*cookie database|could not find .* cookies database|unable to open the cookie jar|decrypt.*cookie/i,
     code: 'COOKIE_DECRYPT',
     message:
-      '无法读取浏览器 Cookie（Chrome / Edge 新版加密，或该浏览器从未使用、没有 Cookie 数据库）。请完全退出浏览器后重试、换一个浏览器，或在设置里指定导出的 cookies.txt。',
+      '无法读取浏览器 Cookie：浏览器可能正在运行（数据库被占用），或使用了新版加密、甚至从未使用过没有 Cookie 数据库。请完全退出浏览器后重试，或在设置里指定导出的 cookies.txt。',
   },
   {
     match: /Sign in to confirm|login required|Please log in|需要登录/i,
@@ -113,4 +114,26 @@ export function mapYtdlpError(
     code: 'UNKNOWN',
     message: `下载失败（yt-dlp 退出码 ${exitCode}），请点"查看原始日志"确认原因。`,
   }
+}
+
+/**
+ * 判断一次失败是否属于"浏览器 Cookie 读不出来"，值得丢掉 Cookie 再试一次
+ * @param code - 已映射的错误码
+ * @param output - yt-dlp 的原始输出
+ * @returns 可以不带 Cookie 重试时返回 true
+ * @remarks 除了错误码，再看一次原始输出：yt-dlp 的 Cookie 报错文案随版本与场景变化
+ * （DPAPI 解密失败、数据库被占用复制失败、缺少 Cookie 库等），只认错误码迟早漏掉新文案
+ */
+export function shouldRetryWithoutCookies(code: string, output: string): boolean {
+  // 平台明确要求"更新鲜的 Cookie"时，丢掉 Cookie 只会更糟
+  if (code === 'NEED_FRESH_COOKIES') {
+    return false
+  }
+
+  if (code === 'COOKIE_DECRYPT') {
+    return true
+  }
+
+  // 未归类的失败再按关键词兜底
+  return /cookie/i.test(output)
 }
