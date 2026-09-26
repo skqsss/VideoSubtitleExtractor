@@ -14,6 +14,7 @@
     "build:electron": "npm run build && npm run build:main",
     "build:win": "npm run build:electron && electron-builder --win --publish never",
     "electron:start": "npm run build:main && electron .",
+    "electron:dev": "npm run build:main && node scripts/electron-dev.mjs",
     "start": "npm run build && node src/server/index.ts",
     "preview": "vite preview",
     "build-only": "vite build",
