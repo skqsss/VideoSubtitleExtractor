@@ -167,6 +167,36 @@ npm run build:win:portable    # 只出免安装单文件
 | 只改 Cookie、下载目录、代理等配置 | 在设置里改即可 | 否 |
 | 只更新 yt-dlp | 应用内「更新 yt-dlp」按钮 | 否 |
 
+### 自己手动打包的完整步骤
+
+```powershell
+# 0. 进项目目录（路径带空格，记得加引号）
+cd "D:\Leaning Project\VideoSubtitleExtractor"
+
+# 1. 改 package.json 里的 version，例如 0.1.1 → 0.1.2
+#    不改版本号的话，安装包同名、程序列表里的版本也不变，用户分不清新旧
+
+# 2. 一条命令跑测试 + 打包（国内网络建议先设 nsis 工具镜像）
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
+npm run release
+
+# 3. 产物在 release\ 下
+#    release\视频分辨率解析下载器 Setup 0.1.2.exe
+```
+
+只想构建不打包：`npm run build:electron`；只想出便携单文件：`npm run build:win:portable`。
+
+**重装依赖后必须补的一步**：本机 npm 的策略会拦掉安装脚本，`npm install` 后 Electron 只有壳、没有二进制。
+如果不小心删了 `node_modules`，装完依赖要手动补下载：
+
+```powershell
+$env:ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+node node_modules/electron/install.js
+```
+
+打包如果报 `EPERM: rename win-unpacked.tmp`（杀软或索引占用解压目录），先删掉 `release\` 再重试；
+配置里已用 `electronDist` 复用本地 Electron，跳过下载解包那一步。
+
 产物：
 
 - `release\视频解析下载器-便携版-0.1.0.exe`：免安装，双击即用

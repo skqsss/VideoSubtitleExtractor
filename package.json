@@ -15,6 +15,7 @@
     "build:win": "npm run build:electron && electron-builder --win --publish never",
     "build:win:installer": "npm run build:electron && electron-builder --win nsis --publish never",
     "build:win:portable": "npm run build:electron && electron-builder --win portable --publish never",
+    "release": "npm test && npm run build:win",
     "electron:start": "npm run build:main && electron .",
     "electron:dev": "npm run build:main && node scripts/electron-dev.mjs",
     "start": "npm run build && node src/server/index.ts",
