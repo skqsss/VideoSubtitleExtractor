@@ -54,13 +54,52 @@ function resolveBinaryDir(): string {
   const source = path.join(process.resourcesPath, RESOURCES_BIN_DIR)
   const marker = path.join(target, 'yt-dlp.exe')
 
-  if (!fs.existsSync(marker) && fs.existsSync(source)) {
+  if (!fs.existsSync(source)) {
+    return target
+  }
+
+  if (!fs.existsSync(marker)) {
     fs.mkdirSync(target, { recursive: true })
     logger.info('electron', '首次启动，复制外部二进制到用户目录', { target })
     fs.cpSync(source, target, { recursive: true })
+
+    return target
   }
 
+  // 升级安装后，随包版本可能比用户目录里的新：按时间戳择优同步
+  // 反过来（用户点过"更新 yt-dlp"，用户目录里更新）则保留用户那份，不覆盖
+  refreshBinaryIfNewer(path.join(source, 'yt-dlp.exe'), path.join(target, 'yt-dlp.exe'))
+  refreshBinaryIfNewer(
+    path.join(source, 'ffmpeg', 'ffmpeg.exe'),
+    path.join(target, 'ffmpeg', 'ffmpeg.exe'),
+  )
+
   return target
+}
+
+/**
+ * 随包二进制比用户目录里的新时，覆盖同步（含同目录的 dll）
+ * @param sourceFile - 资源目录里的文件
+ * @param targetFile - userData 里的同名文件
+ */
+function refreshBinaryIfNewer(sourceFile: string, targetFile: string): void {
+  if (!fs.existsSync(sourceFile)) {
+    return
+  }
+
+  const sourceTime = fs.statSync(sourceFile).mtimeMs
+  const targetTime = fs.existsSync(targetFile) ? fs.statSync(targetFile).mtimeMs : 0
+  if (sourceTime <= targetTime) {
+    return
+  }
+
+  const sourceDir = path.dirname(sourceFile)
+  const targetDir = path.dirname(targetFile)
+  fs.mkdirSync(targetDir, { recursive: true })
+  fs.cpSync(sourceDir, targetDir, { recursive: true, force: true })
+  logger.info('electron', '随包二进制较新，已同步到用户目录', {
+    file: path.basename(sourceFile),
+  })
 }
 
 /**
