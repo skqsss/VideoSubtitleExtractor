@@ -1,0 +1,201 @@
+/**
+ * @file 全局基础样式
+ * @author Codex
+ * @description 复位、排版、控件与通用布局类；组件私有样式写在各自 SFC 内
+ * @date 2026-09-26
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+figure {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* 数字、格式 ID、时间码统一等宽并启用表格数字对齐 */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--color-accent);
+}
+
+/* 键盘可达：统一可见焦点，禁止 outline: none */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.layout-wrap {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding: 0 var(--layout-gutter);
+}
+
+.panel {
+  background: var(--color-panel);
+  border: var(--border-hairline);
+}
+
+.section-title {
+  font-size: var(--font-size-section);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.muted {
+  color: var(--color-ink-soft);
+}
+
+.detail {
+  font-size: var(--font-size-detail);
+}
+
+/* 主按钮：整页只用一种强调色，且只出现在主操作与刻度条上 */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-panel);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--color-ink-soft);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  color: var(--color-ink-soft);
+  background: var(--color-canvas);
+}
+
+.button--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.button--primary:hover:not(:disabled) {
+  background: #1a5f4f;
+  border-color: #1a5f4f;
+}
+
+.button--primary:disabled {
+  background: var(--color-ink-soft);
+  border-color: var(--color-ink-soft);
+  color: #ffffff;
+}
+
+.button--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-ink-soft);
+  padding: 0 8px;
+}
+
+.button--quiet:hover:not(:disabled) {
+  color: var(--color-ink);
+  border-color: var(--color-line);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field__label {
+  font-size: var(--font-size-detail);
+  color: var(--color-ink-soft);
+}
+
+.input,
+.select {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-panel);
+}
+
+.input::placeholder {
+  color: #9aa3a1;
+}
+
+/* 状态点：仅用作设备式状态指示，不参与强调色体系 */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-ink-soft);
+}
+
+.status-dot--ok {
+  background: var(--color-accent);
+}
+
+.status-dot--error {
+  background: var(--color-danger);
+}
+
+.status-dot--warn {
+  background: var(--color-warn);
+}
+
+/* 尊重系统减弱动效设置 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .layout-wrap {
+    padding: 0 var(--layout-gutter-narrow);
+  }
+}

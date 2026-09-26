@@ -1,0 +1,36 @@
+/**
+ * @file 设计令牌
+ * @author Codex
+ * @description 颜色、字体、间距与断点的唯一来源，组件不得再写死色值
+ * @date 2026-09-26
+ */
+
+:root {
+  /* 颜色：冷调浅灰绿画布，强调色只用于主按钮与刻度条 */
+  --color-canvas: #eff1ef;
+  --color-panel: #ffffff;
+  --color-ink: #14181a;
+  --color-ink-soft: #5f686b;
+  --color-line: #d5dad8;
+  --color-accent: #1f6f5c;
+  --color-accent-soft: #e4efeb;
+  --color-warn: #b4791f;
+  --color-danger: #a33a2b;
+
+  /* 字体 */
+  --font-ui: system-ui, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --font-size-title: 28px;
+  --font-size-section: 20px;
+  --font-size-body: 14px;
+  --font-size-detail: 13px;
+  --line-height-body: 1.6;
+
+  /* 布局 */
+  --layout-max-width: 1080px;
+  --layout-gutter: 24px;
+  --layout-gutter-narrow: 16px;
+  --breakpoint-single-column: 768px;
+  --radius-control: 2px;
+  --border-hairline: 1px solid var(--color-line);
+}
