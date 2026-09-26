@@ -42,9 +42,17 @@ const COOKIE_FIELD_COUNT = 7
  * 解析单个 cookie 文件的内容
  * @param content - 文件文本
  * @returns 解析出的 Cookie 行，解析失败的行会被跳过
- * @remarks 只保留有效 Cookie 行，注释一并丢弃（合并时统一写标准头）
+ * @remarks 自动识别两种常见格式：
+ * 1）Netscape 文本（yt-dlp 原生格式，扩展 Get cookies.txt LOCALLY 的导出）；
+ * 2）Cookie-Editor 等扩展导出的 JSON 数组（含 domain/name/value 字段）。
+ * 注释一并丢弃，合并时统一写标准头。
  */
 export function parseCookieContent(content: string): NetscapeCookieLine[] {
+  const jsonLines = parseCookieJson(content)
+  if (jsonLines) {
+    return jsonLines
+  }
+
   const lines: NetscapeCookieLine[] = []
 
   for (const rawLine of content.split(/\r?\n/)) {
@@ -75,6 +83,118 @@ export function parseCookieContent(content: string): NetscapeCookieLine[] {
   }
 
   return lines
+}
+
+/**
+ * 尝试按 JSON 格式解析 Cookie
+ * @param content - 文件文本
+ * @returns 解析结果；不是 JSON 格式时返回 null
+ * @remarks 兼容两种结构：直接是数组，或 { cookies: [...] }（Chrome 导出风格）
+ */
+export function parseCookieJson(content: string): NetscapeCookieLine[] | null {
+  const trimmed = content.trim()
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+    return null
+  }
+
+  let data: unknown
+  try {
+    data = JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+
+  const list = Array.isArray(data)
+    ? data
+    : isRecord(data) && Array.isArray(data.cookies)
+      ? data.cookies
+      : null
+  if (!list) {
+    return null
+  }
+
+  const lines: NetscapeCookieLine[] = []
+  for (const item of list) {
+    if (!isRecord(item)) {
+      continue
+    }
+
+    const line = convertJsonCookie(item)
+    if (line) {
+      lines.push(line)
+    }
+  }
+
+  return lines
+}
+
+/**
+ * 把一条 JSON Cookie 转成 Netscape 行
+ * @param item - JSON 里的单个 Cookie 对象
+ * @returns 转换结果，缺少必需字段时返回 null
+ */
+function convertJsonCookie(item: Record<string, unknown>): NetscapeCookieLine | null {
+  const name = toText(item.name)
+  const rawDomain = toText(item.domain)
+  if (!name || !rawDomain) {
+    return null
+  }
+
+  const isHttpOnly = item.httpOnly === true
+  const domain =
+    isHttpOnly && !rawDomain.startsWith(HTTP_ONLY_PREFIX)
+      ? `${HTTP_ONLY_PREFIX}${rawDomain}`
+      : rawDomain
+  const includeSubdomains = rawDomain.startsWith('.') ? 'TRUE' : 'FALSE'
+  const path = toText(item.path) || '/'
+  const secure = item.secure === true ? 'TRUE' : 'FALSE'
+  const expires = toExpirySeconds(item.expirationDate)
+  // Cookie 值按规范不含控制字符，这里额外兜底，避免制表符把 Netscape 的字段切开
+  const value = toText(item.value).replace(/[\t\r\n]/g, '')
+
+  return {
+    domain,
+    path,
+    name,
+    raw: [domain, includeSubdomains, path, secure, expires, name, value].join('\t'),
+  }
+}
+
+/**
+ * 把 JSON 里的过期时间统一成秒
+ * @param value - 原始值，可能是秒、毫秒或缺失
+ * @returns 秒级时间戳字符串，缺失或非法时为 '0'
+ */
+function toExpirySeconds(value: unknown): string {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return '0'
+  }
+
+  // 毫秒级时间戳（大于 10^12）需要先换算成秒
+  return String(Math.floor(numeric > 1e12 ? numeric / 1000 : numeric))
+}
+
+/**
+ * 判断是否为普通对象
+ * @param value - 待判断的值
+ * @returns 是对象时返回 true
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/**
+ * 把未知值转成字符串
+ * @param value - 待转换的值
+ * @returns 字符串，null/undefined 得到空串
+ */
+function toText(value: unknown): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value)
 }
 
 /**

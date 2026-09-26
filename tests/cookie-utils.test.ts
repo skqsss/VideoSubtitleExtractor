@@ -102,3 +102,61 @@ test('目录里混入非 Cookie 的 txt 时被跳过，其余文件照常生效'
   assert.equal(merged.summary.skippedFiles, 1)
   assert.deepEqual(merged.summary.domains, ['douyin.com'])
 })
+
+test('Cookie-Editor 导出的 JSON 数组能转成 Netscape 行', () => {
+  const json = JSON.stringify([
+    {
+      domain: '.douyin.com',
+      expirationDate: 1821937978.5,
+      hostOnly: false,
+      httpOnly: true,
+      name: 'ttwid',
+      path: '/',
+      sameSite: 'no_restriction',
+      secure: true,
+      session: false,
+      value: '1%7Cabc',
+    },
+    {
+      domain: '.bilibili.com',
+      expirationDate: 1900000000,
+      hostOnly: false,
+      httpOnly: false,
+      name: 'buvid3',
+      path: '/',
+      secure: false,
+      value: 'XYZ',
+    },
+  ])
+
+  const merged = mergeCookieContents([json])
+
+  assert.equal(merged.summary.cookieCount, 2)
+  assert.equal(merged.summary.skippedFiles, 0)
+  assert.deepEqual(merged.summary.domains, ['bilibili.com', 'douyin.com'])
+  // httpOnly 要转成 #HttpOnly_ 前缀，否则 yt-dlp 不会把它当 HttpOnly Cookie
+  assert.ok(merged.content.includes('#HttpOnly_.douyin.com\tTRUE\t/\tTRUE\t1821937978\tttwid\t1%7Cabc'))
+  assert.ok(merged.content.includes('.bilibili.com\tTRUE\t/\tFALSE\t1900000000\tbuvid3\tXYZ'))
+})
+
+test('Chrome 风格的 { cookies: [...] } 结构也能解析', () => {
+  const json = JSON.stringify({
+    cookies: [
+      { domain: 'www.bilibili.com', name: 'SESSDATA', value: 'x', path: '/', secure: true },
+    ],
+  })
+
+  const merged = mergeCookieContents([json])
+
+  assert.equal(merged.summary.cookieCount, 1)
+  // 非 . 开头的域说明不包含子域，Netscape 第二列应为 FALSE
+  assert.ok(merged.content.includes('www.bilibili.com\tFALSE\t/\tTRUE\t0\tSESSDATA\tx'))
+})
+
+test('缺字段或格式不对的 JSON 不会污染合并结果', () => {
+  const badJson = JSON.stringify([{ name: 'SESSDATA' }, { domain: '.x.com', name: '', value: 'y' }])
+  const merged = mergeCookieContents([badJson, '这不是 JSON'])
+
+  assert.equal(merged.summary.cookieCount, 0)
+  assert.equal(merged.summary.skippedFiles, 2)
+})

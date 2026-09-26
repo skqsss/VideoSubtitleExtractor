@@ -20,8 +20,8 @@ const CACHE_DIR = path.join(PROJECT_ROOT, 'cache')
 /** 合并后的临时 Cookie 文件路径，只在本机使用 */
 const MERGED_COOKIE_PATH = path.join(CACHE_DIR, 'yt-dlp-cookies.txt')
 
-/** 目录形式的配置里，只认这几种扩展名 */
-const COOKIE_FILE_EXTENSIONS = ['.txt']
+/** 目录形式的配置里认这几种扩展名：Netscape 文本与扩展导出的 JSON */
+const COOKIE_FILE_EXTENSIONS = ['.txt', '.json']
 
 /**
  * 把配置值展开成实际存在的 Cookie 文件列表

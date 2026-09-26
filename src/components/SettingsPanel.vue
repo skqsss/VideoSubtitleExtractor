@@ -124,7 +124,9 @@ async function saveSettings(): Promise<void> {
             placeholder="D:\\video-workspace\\cookies"
           />
           <span class="field__hint">
-            浏览器装扩展「Get cookies.txt LOCALLY」，分别在 B 站与抖音页面点导出，把两份文件放进同一个文件夹后填该文件夹即可。
+            在浏览器装 Cookie 导出扩展（Edge / Chrome 可用 Cookie-Editor，或用 Get cookies.txt LOCALLY），
+            分别在 B 站与抖音页面导出；两种格式都认——扩展导出的 <span class="mono">.txt</span>（Netscape）与
+            <span class="mono">.json</span>（Cookie-Editor）。把文件放进同一个文件夹后填该文件夹即可。
             填了这里就默认不再读浏览器 Cookie（想两者一起用，请在输入条上显式选择浏览器）。
           </span>
         </label>
