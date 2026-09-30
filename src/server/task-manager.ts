@@ -29,6 +29,11 @@ import {
 import { prepareCookiesFile } from './cookie-service.ts'
 import { YtdlpError } from './errors.ts'
 import { logger } from './logger.ts'
+import {
+  buildOutputBasePattern,
+  resolveNextOutputIndex,
+  resolveNextOutputIndexFromPath,
+} from './output-name.ts'
 import { runCommand } from './process-runner.ts'
 import {
   PROGRESS_LINE_MARKER,
@@ -50,8 +55,12 @@ const LOG_LINE_LIMIT = 200
 /** 单个任务的进度更新最短间隔，避免刷屏式推送 */
 const PROGRESS_THROTTLE_MS = 200
 
-/** 下载最多尝试次数：首次，加上 Cookie 不可读时的不带 Cookie 重试 */
-const MAX_DOWNLOAD_ATTEMPTS = 2
+/** 同名文件改名重试上限：只有目录里堆满同序号的文件才会用尽 */
+const MAX_OUTPUT_NAME_RETRIES = 10
+
+/** 改名重试仍复用了旧文件时的提示 */
+const REUSED_OUTPUT_WARNING =
+  '同名文件已存在，且自动改名后仍命中旧文件，本次直接复用了磁盘上的旧文件（可能与所选档位不同）。'
 
 /** Cookie 降级说明，展示在任务条目上 */
 const COOKIE_FALLBACK_WARNING =
@@ -64,6 +73,10 @@ interface RunningTask {
   cancelRequested: boolean
   /** yt-dlp 本次任务写出的目标文件（用于取消后精确清理残留） */
   destinationPaths: Set<string>
+  /** yt-dlp 判定"已下载"而复用的旧文件 */
+  reusedPaths: Set<string>
+  /** 本次是否产出了后处理产物（合并 / 转码），用于区分"复用分片"与"复用最终文件" */
+  hasPostProcessedOutput: boolean
   /** 最后一个进度推送时间 */
   lastEmittedAt: number
 }
@@ -78,6 +91,10 @@ interface DownloadOutcome {
   canceled: boolean
   /** 本次写出的目标文件路径 */
   destinationPaths: Set<string>
+  /** yt-dlp 复用的同名旧文件路径 */
+  reusedPaths: string[]
+  /** 本次是否产出了后处理产物（合并 / 转码） */
+  hasPostProcessedOutput: boolean
   /** 启动或参数阶段的错误，优先于退出码判断 */
   error?: { code: string; message: string }
 }
@@ -317,10 +334,12 @@ export class TaskManager {
    * @param task - 任务快照
    * @remarks 浏览器 Cookie 读不出来时（Chrome / Edge 新版加密）自动降级为不读取 Cookie 重试一次，
    * 否则用户会在下载这一步被环境问题直接挡住
+   * 下载目录里已有同名文件时改用带序号的文件名重下，yt-dlp 的"已下载"判定只在退回旧文件时才生效
    */
   private async runTask(task: DownloadTask): Promise<void> {
     try {
       const config = this.getConfig()
+      const downloadDir = ensureDownloadDir(config)
       const taskRequest = this.taskRequests.get(task.id)
       const cookiesFile = resolveTaskCookiesFile(config)
       let useBrowserCookies =
@@ -329,9 +348,14 @@ export class TaskManager {
           config.cookieBrowser,
           Boolean(cookiesFile),
         ) !== 'none'
+      const basePattern = buildOutputBasePattern(task.title, task.mode, taskRequest?.format)
+      // 先按解析到的标题探一次同名文件，命中就直接写到 `(序号)` 上，省掉一轮"复用旧文件"的空跑
+      let outputIndex = resolveNextOutputIndex(downloadDir, (baseName) => basePattern.test(baseName))
+      let nameRetryCount = 0
+      let hasTriedCookieFallback = false
 
-      for (let attempt = 0; attempt < MAX_DOWNLOAD_ATTEMPTS; attempt += 1) {
-        const outcome = await this.spawnAttempt(task, useBrowserCookies)
+      for (;;) {
+        const outcome = await this.spawnAttempt(task, useBrowserCookies, outputIndex)
 
         if (outcome.canceled) {
           this.finishCanceled(task, outcome)
@@ -348,6 +372,25 @@ export class TaskManager {
         }
 
         if (outcome.code === 0) {
+          if (shouldRetryWithNewName(outcome, nameRetryCount)) {
+            nameRetryCount += 1
+            outputIndex = Math.max(
+              outputIndex + 1,
+              resolveNextOutputIndexFromPath(downloadDir, outcome.reusedPaths[0]),
+            )
+            this.appendLog(
+              task.id,
+              `[本工具] 下载目录已有同名文件，改用第 ${outputIndex} 个副本的文件名重新下载`,
+            )
+            this.resetProgress(task)
+
+            continue
+          }
+
+          if (outcome.reusedPaths.length > 0 && !outcome.hasPostProcessedOutput) {
+            this.updateTask(task, { warning: REUSED_OUTPUT_WARNING })
+          }
+
           this.finishDone(task, outcome)
           this.pump()
 
@@ -355,9 +398,15 @@ export class TaskManager {
         }
 
         const mapped = mapYtdlpError(outcome.output, outcome.code)
-        if (useBrowserCookies && shouldRetryWithoutCookies(mapped.code, outcome.output)) {
+        if (
+          useBrowserCookies &&
+          !hasTriedCookieFallback &&
+          shouldRetryWithoutCookies(mapped.code, outcome.output)
+        ) {
+          hasTriedCookieFallback = true
           useBrowserCookies = false
           this.appendLog(task.id, '[本工具] 浏览器 Cookie 读取失败，改为不读取 Cookie 重新下载')
+          this.resetProgress(task)
           this.updateTask(task, { warning: COOKIE_FALLBACK_WARNING })
 
           continue
@@ -377,22 +426,34 @@ export class TaskManager {
    * 启动一次 yt-dlp 下载并等待进程结束
    * @param task - 任务快照
    * @param useBrowserCookies - 本次是否读取浏览器 Cookie
+   * @param outputIndex - 同名文件序号，0 表示沿用原名
    * @returns 本次执行结果
    */
-  private spawnAttempt(task: DownloadTask, useBrowserCookies: boolean): Promise<DownloadOutcome> {
+  private spawnAttempt(
+    task: DownloadTask,
+    useBrowserCookies: boolean,
+    outputIndex: number,
+  ): Promise<DownloadOutcome> {
     const config = this.getConfig()
     const ytdlpPath = resolveYtdlpPath(config)
     const downloadDir = ensureDownloadDir(config)
     const ffmpegDir = resolveFfmpegDir(config)
     const taskRequest = this.taskRequests.get(task.id)
     const cookiesFile = resolveTaskCookiesFile(config)
-    const emptyOutcome = { code: null, output: '', canceled: false, destinationPaths: new Set<string>() }
+    const emptyOutcome = {
+      code: null,
+      output: '',
+      canceled: false,
+      destinationPaths: new Set<string>(),
+      reusedPaths: [] as string[],
+      hasPostProcessedOutput: false,
+    }
 
     let args: string[]
     try {
       args = [
         ...buildFormatArgs(task.mode, taskRequest?.format),
-        ...buildOutputArgs(downloadDir, task.mode),
+        ...buildOutputArgs(downloadDir, task.mode, outputIndex),
         ...buildFfmpegArgs(ffmpegDir),
         ...buildProgressArgs(),
         ...(task.mode === 'audio-mp3' ? [] : ['--merge-output-format', 'mp4']),
@@ -423,6 +484,8 @@ export class TaskManager {
         child,
         cancelRequested: false,
         destinationPaths: new Set<string>(),
+        reusedPaths: new Set<string>(),
+        hasPostProcessedOutput: false,
         lastEmittedAt: 0,
       }
       this.runningTasks.set(task.id, running)
@@ -463,6 +526,8 @@ export class TaskManager {
           output: `${stderrText}\n${stdoutBuffer}`,
           canceled: running.cancelRequested,
           destinationPaths: running.destinationPaths,
+          reusedPaths: [...running.reusedPaths],
+          hasPostProcessedOutput: running.hasPostProcessedOutput,
         })
       })
     })
@@ -505,9 +570,14 @@ export class TaskManager {
       return
     }
 
-    const destination = /^\[(?:download|ExtractAudio)\] Destination: (.+)$/.exec(line)
-    if (destination?.[1]) {
-      const destinationPath = destination[1].trim()
+    const destination = /^\[(download|ExtractAudio)\] Destination: (.+)$/.exec(line)
+    if (destination?.[2]) {
+      const destinationPath = destination[2].trim()
+      if (destination[1] === 'ExtractAudio') {
+        // 抽取音轨会转出一个新的最终文件，这种情况不能算"什么都没下"
+        running.hasPostProcessedOutput = true
+      }
+
       if (!running.destinationPaths.has(destinationPath)) {
         running.destinationPaths.add(destinationPath)
         // 合并下载会依次拉视频轨与音轨，新轨道开始时重置进度，避免进度条卡在 100%
@@ -519,16 +589,33 @@ export class TaskManager {
 
     const merged = /^\[Merger\] Merging formats into "(.+)"$/.exec(line)
     if (merged?.[1]) {
+      running.hasPostProcessedOutput = true
       this.updateTask(task, { outputPath: merged[1].trim() })
     }
 
     const downloaded = /^\[download\] (.+) has already been downloaded$/.exec(line)
     if (downloaded?.[1]) {
-      this.updateTask(task, {
-        outputPath: downloaded[1].trim(),
-        warning: '同名文件已存在，yt-dlp 直接复用了旧文件，本次未重新下载（可能与所选档位不同）。',
-      })
+      const reusedPath = downloaded[1].trim()
+      running.reusedPaths.add(reusedPath)
+      this.updateTask(task, { outputPath: reusedPath })
     }
+  }
+
+  /**
+   * 重置进度相关字段
+   * @param task - 任务快照
+   * @remarks 换文件名或换 Cookie 重下时，沿用上一轮的进度会让进度条卡在旧位置
+   */
+  private resetProgress(task: DownloadTask): void {
+    this.updateTask(task, {
+      percent: 0,
+      speed: '',
+      eta: '',
+      downloadedBytes: 0,
+      totalBytes: null,
+      outputPath: '',
+      warning: '',
+    })
   }
 
   /**
@@ -717,6 +804,25 @@ export class TaskManager {
   private buildLog(taskId: string): string {
     return (this.logLines.get(taskId) ?? []).join('\n')
   }
+}
+
+/**
+ * 判断本次尝试是否需要换一个序号重下
+ * @param outcome - 本次尝试的结果
+ * @param retryCount - 已经重试过的次数
+ * @returns 需要换名重下时返回 true
+ * @remarks yt-dlp 报的"已下载"分两种：复用最终产物（本次其实什么都没下，必须换序号重下），
+ * 以及复用合并前留下的分片（合并照样产出了新文件，再重下一遍只会白费带宽并多留一个文件）
+ */
+export function shouldRetryWithNewName(
+  outcome: { reusedPaths: string[]; hasPostProcessedOutput: boolean },
+  retryCount: number,
+): boolean {
+  return (
+    outcome.reusedPaths.length > 0 &&
+    !outcome.hasPostProcessedOutput &&
+    retryCount < MAX_OUTPUT_NAME_RETRIES
+  )
 }
 
 /**

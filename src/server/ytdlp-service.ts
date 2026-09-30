@@ -357,16 +357,20 @@ export function findCachedFormat(url: string, formatId: string): VideoFormat | u
  * 生成下载用的输出模板
  * @param downloadDir - 下载目录
  * @param mode - 下载模式
+ * @param outputIndex - 同名文件的序号，0 表示沿用原名
  * @returns -P 与 -o 两个参数片段
  * @remarks 视频档位在文件名里带上宽×高：同一个视频换档重下时，yt-dlp 默认会判定
  * 旧文件"已下载"而复用，导致选了 1080P 却拿到先前的 360P 文件。
  * 竖屏视频的高度大于宽度，因此用宽×高而不是只用高度，避免出现"[1920p]"这种反直觉命名
+ * 输出目录里已有同名文件时，把序号拼在扩展名前（如 `标题 [1920x1080] (1).mp4`），
+ * 让重复下载落成新文件，而不是被 yt-dlp 判为"已下载"直接跳过
  */
-export function buildOutputArgs(downloadDir: string, mode: DownloadMode): string[] {
+export function buildOutputArgs(downloadDir: string, mode: DownloadMode, outputIndex = 0): string[] {
+  const suffix = outputIndex > 0 ? ` (${outputIndex})` : ''
   const template =
     mode === 'audio-mp3'
-      ? '%(title)s.%(ext)s'
-      : '%(title)s [%(width)sx%(height)s].%(ext)s'
+      ? `%(title)s${suffix}.%(ext)s`
+      : `%(title)s [%(width)sx%(height)s]${suffix}.%(ext)s`
 
   return ['-P', downloadDir, '-o', template, '--windows-filenames']
 }
