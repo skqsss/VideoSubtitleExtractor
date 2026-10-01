@@ -49,9 +49,9 @@ test('浏览器 Cookie 解密失败给出可执行的解决办法', () => {
   assert.match(mapped.message, /完全退出浏览器/)
 })
 
-test('抖音要求新鲜 Cookie 时提示配置 cookies.txt', () => {
+test('其他平台要求新鲜 Cookie 时提示配置 cookies.txt', () => {
   const mapped = mapYtdlpError(
-    'ERROR: [Douyin] 7689: Fresh cookies (not necessarily logged in) are needed',
+    'ERROR: [TikTok] 7689: Fresh cookies (not necessarily logged in) are needed',
     1,
     'probe',
   )
@@ -59,6 +59,37 @@ test('抖音要求新鲜 Cookie 时提示配置 cookies.txt', () => {
   assert.equal(mapped.code, 'NEED_FRESH_COOKIES')
   assert.match(mapped.message, /cookies\.txt/)
   assert.match(mapped.message, /重新导出/)
+})
+
+test('抖音接口被风控拦截时不再甩锅给 Cookie', () => {
+  // 探针会带 --no-warnings，实际拿到的就是这一行 ERROR（没有 403 那条 WARNING）
+  const probeOutput =
+    'ERROR: [Douyin] 7691451841657439323: Fresh cookies (not necessarily logged in) are needed; please report this issue on  https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U'
+  const mappedProbe = mapYtdlpError(probeOutput, 1, 'probe')
+
+  assert.equal(mappedProbe.code, 'PLATFORM_BLOCKED')
+
+  const output = [
+    'WARNING: [Douyin] 7691451841657439323: Failed to download web detail JSON: HTTP Error 403: Forbidden',
+    'ERROR: [Douyin] 7691451841657439323: Fresh cookies (not necessarily logged in) are needed; please report this issue',
+  ].join('\n')
+  const mapped = mapYtdlpError(output, 1, 'probe')
+
+  assert.equal(mapped.code, 'PLATFORM_BLOCKED')
+  assert.match(mapped.message, /403/)
+  assert.match(mapped.message, /和 Cookie 是否新鲜无关/)
+  // 明确说清楚重新导出不管用，避免用户白折腾
+  assert.match(mapped.message, /重新导出 Cookie、换浏览器、清缓存都不会生效/)
+})
+
+test('Argus 风控文案同样归入平台拦截', () => {
+  const mapped = mapYtdlpError('ERROR: Blocked by ArgusSecurityPlugin Uifid Not Found', 1)
+
+  assert.equal(mapped.code, 'PLATFORM_BLOCKED')
+})
+
+test('平台风控拦截时不丢掉 Cookie 重试', () => {
+  assert.equal(shouldRetryWithoutCookies('PLATFORM_BLOCKED', 'cookie'), false)
 })
 
 test('浏览器没有 Cookie 数据库时同样归入 Cookie 可读性问题', () => {

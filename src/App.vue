@@ -99,6 +99,9 @@ onMounted(() => {
         <p v-else-if="probeStore.errorCode === 'NEED_FRESH_COOKIES'" class="detail">
           下一步：在设置里指定浏览器扩展导出的 cookies.txt（或选择一个能读取 Cookie 的浏览器）。抖音未登录也需要这份 Cookie。
         </p>
+        <p v-else-if="probeStore.errorCode === 'PLATFORM_BLOCKED'" class="detail">
+          下一步：这不是 Cookie 过期，重新导出也无效。抖音接口需要签名参数，当前的 yt-dlp 过不了这道风控，只能等上游适配后可再试。
+        </p>
         <p v-else-if="probeStore.errorCode === 'COOKIE_DECRYPT'" class="detail">
           下一步：在设置里指定 cookies.txt，或完全退出浏览器后重试；Chrome / Edge 新版加密会让 yt-dlp 读不到 Cookie。
         </p>

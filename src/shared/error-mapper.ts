@@ -10,6 +10,7 @@ export type YtdlpErrorCode =
   | 'NEED_LOGIN'
   | 'COOKIE_DECRYPT'
   | 'NEED_FRESH_COOKIES'
+  | 'PLATFORM_BLOCKED'
   | 'COOKIE_FILE_MISSING'
   | 'UNSUPPORTED_URL'
   | 'NETWORK'
@@ -28,6 +29,17 @@ export interface MappedYtdlpError {
 
 /** 关键词规则表：命中即返回对应中文提示，顺序敏感（先具体后笼统） */
 const ERROR_RULES: Array<{ match: RegExp; code: YtdlpErrorCode; message: string }> = [
+  {
+    // 抖音的网页接口现在要求请求带 a_bogus 签名，风控拦截时返回 403，
+    // yt-dlp 会把它兜底成 "Fresh cookies … are needed"，那句提示在这里是误导
+    // 探针带了 --no-warnings，403 那条 WARNING 会被吞掉，所以必须同时认抖音自己那句兜底文案
+    match:
+      /ArgusSecurityPlugin|Failed to download web detail JSON: HTTP Error 403|Signature Not Found|Uifid Not Found|\[Douyin\][^\r\n]*Fresh cookies/i,
+    code: 'PLATFORM_BLOCKED',
+    message:
+      '抖音的网页接口返回了 403 风控拦截，和 Cookie 是否新鲜无关：抖音现在要求请求带签名参数，yt-dlp 拿不到这个签名，' +
+      '所以重新导出 Cookie、换浏览器、清缓存都不会生效。B 站等其他来源不受影响。',
+  },
   {
     match: /Fresh cookies .* are needed|needs fresh cookies/i,
     code: 'NEED_FRESH_COOKIES',
@@ -126,8 +138,8 @@ export function mapYtdlpError(
  * （DPAPI 解密失败、数据库被占用复制失败、缺少 Cookie 库等），只认错误码迟早漏掉新文案
  */
 export function shouldRetryWithoutCookies(code: string, output: string): boolean {
-  // 平台明确要求"更新鲜的 Cookie"时，丢掉 Cookie 只会更糟
-  if (code === 'NEED_FRESH_COOKIES') {
+  // 平台明确要求"更新鲜的 Cookie"、或接口被风控拦截时，丢掉 Cookie 只会更糟
+  if (code === 'NEED_FRESH_COOKIES' || code === 'PLATFORM_BLOCKED') {
     return false
   }
 

@@ -112,6 +112,13 @@ npm run type-check   # vue-tsc 全量类型检查（含服务端）
 
 B 站多数视频能拿到 720P / 1080P（个别视频未登录也能到 1080P），抖音基本解析不了。
 
+> ⚠️ **抖音现在会拦掉 yt-dlp（2026-10 实测）**：抖音的网页详情接口要求请求带 `a_bogus` 签名，
+> 缺签名时直接返回 `403 Blocked by ArgusSecurityPlugin`，yt-dlp 会把它兜底成
+> `Fresh cookies (not necessarily logged in) are needed`。**这不是 Cookie 过期**：实测用刚导出的
+> `sessionid` / `UIFID`（有效期到 11 月）同样报这句，重新导出、换浏览器、清缓存都没用，
+> 本工具已把这种情况单独识别为「平台风控拦截」并给出对应提示。目前只能等 yt-dlp 上游适配，
+> 或者改用其他方式下载该视频；B 站不受影响。
+
 > ⚠️ **过期或与账号不匹配的 Cookie 比不读取更差**：实测本机用一份伪造 SESSDATA 时，
 > 同一个 B 站视频只列出 480P；清空后反而恢复到 1080P。导出要趁刚登录时做，过期就重新导出。
 
