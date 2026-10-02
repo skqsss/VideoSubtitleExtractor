@@ -108,16 +108,15 @@ async function saveSettings(): Promise<void> {
           <input v-model="draft.downloadDir" class="input mono" type="text" />
         </label>
 
-        <div class="settings__row">
-          <label class="field">
-            <span class="field__label">yt-dlp 路径（相对路径按项目根解析）</span>
-            <input v-model="draft.ytdlpPath" class="input mono" type="text" />
-          </label>
-          <label class="field">
-            <span class="field__label">ffmpeg 目录（shared 版要整目录）</span>
-            <input v-model="draft.ffmpegDir" class="input mono" type="text" />
-          </label>
-        </div>
+        <label class="field">
+          <span class="field__label">yt-dlp 路径（相对路径按项目根解析）</span>
+          <input v-model="draft.ytdlpPath" class="input mono" type="text" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">ffmpeg 目录（shared 版要整目录）</span>
+          <input v-model="draft.ffmpegDir" class="input mono" type="text" />
+        </label>
 
         <label class="field">
           <span class="field__label">默认 Cookie 来源（B 站 1080P+ 与抖音建议选浏览器）</span>
@@ -258,10 +257,14 @@ async function saveSettings(): Promise<void> {
 }
 
 .settings__head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px;
+  background: var(--color-panel);
   border-bottom: var(--border-hairline);
 }
 
@@ -270,11 +273,13 @@ async function saveSettings(): Promise<void> {
   flex-direction: column;
   gap: 14px;
   padding: 16px;
+  min-width: 0;
 }
 
 .settings__row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* 窄到放不下两列时自动并成一列，避免再把抽屉顶宽 */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
 }
 

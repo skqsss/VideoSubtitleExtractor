@@ -143,15 +143,23 @@ a {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* 允许在网格/弹性行里收缩，否则内容会顶破容器 */
+  min-width: 0;
 }
 
 .field__label {
   font-size: var(--font-size-detail);
   color: var(--color-ink-soft);
+  /* 长标签（路径、说明）不允许撑宽容器 */
+  overflow-wrap: anywhere;
 }
 
 .input,
 .select {
+  /* 输入框默认按 size=20 的固有宽度排版，不写这两行会把设置抽屉顶出横向滚动条 */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   min-height: 36px;
   padding: 0 10px;
   border: 1px solid var(--color-line);
