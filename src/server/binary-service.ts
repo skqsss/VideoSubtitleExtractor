@@ -5,14 +5,13 @@
  * @date 2026-09-26
  */
 
-import { createWriteStream } from 'node:fs'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Readable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
 
 import type { AppConfig, HealthResult } from '../shared/types.ts'
 import { ensureDownloadDir, resolveFfmpegDir, resolveYtdlpPath } from './config.ts'
+import { YtdlpError } from './errors.ts'
+import { downloadFile, resolveDownloadChannel } from './http-download.ts'
 import { logger } from './logger.ts'
 import { runCommand } from './process-runner.ts'
 
@@ -119,41 +118,64 @@ export async function checkHealth(config: AppConfig): Promise<HealthResult> {
  * 下载最新版 yt-dlp 并覆盖本地副本
  * @param config - 应用配置
  * @returns 更新后的版本号
- * @throws Error 下载或替换失败时抛出，错误信息为中文
- * @remarks 先写临时文件再重命名，避免下载中断毁掉当前可用副本
+ * @throws YtdlpError 下载或替换失败时抛出，错误信息为中文
+ * @remarks 先写临时文件再重命名，避免下载中断毁掉当前可用副本；
+ * 下载本身带空闲超时与重试（见 http-download），断流不会一直卡在"更新中"
  */
 export async function updateYtdlp(config: AppConfig): Promise<string> {
   const ytdlpPath = resolveYtdlpPath(config)
   const tempPath = `${ytdlpPath}.download`
   fs.mkdirSync(path.dirname(ytdlpPath), { recursive: true })
 
-  logger.info('binary-service', '开始下载最新版 yt-dlp')
+  const { fetchImpl, via } = await resolveDownloadChannel()
+  logger.info('binary-service', '开始下载最新版 yt-dlp', { url: YTDLP_LATEST_URL, via })
 
-  let response: Response
+  let bytes = 0
   try {
-    response = await fetch(YTDLP_LATEST_URL, { redirect: 'follow' })
+    const result = await downloadFile({
+      url: YTDLP_LATEST_URL,
+      targetPath: tempPath,
+      fetchImpl,
+    })
+    bytes = result.bytes
   } catch (error) {
-    throw new Error(`下载 yt-dlp 失败，请检查网络或代理：${(error as Error).message}`)
-  }
-
-  if (!response.ok || !response.body) {
-    throw new Error(`下载 yt-dlp 失败，HTTP 状态码 ${response.status}`)
+    throw new YtdlpError(
+      'NETWORK',
+      buildDownloadFailureMessage((error as Error).message, via, ytdlpPath),
+    )
   }
 
   try {
-    await pipeline(Readable.fromWeb(response.body), createWriteStream(tempPath))
     fs.renameSync(tempPath, ytdlpPath)
   } catch (error) {
     fs.rmSync(tempPath, { force: true })
-    throw new Error(`写入 yt-dlp 失败：${(error as Error).message}`)
+    throw new YtdlpError('UNKNOWN', `写入 yt-dlp 失败：${(error as Error).message}`)
   }
 
   const version = await readYtdlpVersion(ytdlpPath)
   if (!version) {
-    throw new Error('更新后无法执行 yt-dlp，请手动重新下载 yt-dlp.exe')
+    throw new YtdlpError(
+      'UNKNOWN',
+      '更新后无法执行 yt-dlp，文件可能没下完整。请重试一次，或手动下载 yt-dlp.exe 覆盖过去。',
+    )
   }
 
-  logger.info('binary-service', 'yt-dlp 更新完成', { version })
+  logger.info('binary-service', 'yt-dlp 更新完成', { version, bytes, via })
 
   return version
+}
+
+/**
+ * 组织 yt-dlp 下载失败的提示
+ * @param reason - 底层失败原因
+ * @param via - 本次使用的下载通道
+ * @param ytdlpPath - 目标路径，便于用户手动覆盖
+ * @returns 中文提示
+ */
+function buildDownloadFailureMessage(reason: string, via: string, ytdlpPath: string): string {
+  const hint = via.startsWith('Node')
+    ? '当前是命令行运行模式，下载不经过系统代理；如果开着代理/VPN，请改用桌面版应用，或把代理切成 TUN 模式'
+    : '请确认网络可用、代理/VPN 已开启后重试'
+
+  return `下载 yt-dlp 失败：${reason}。${hint}。也可以手动下载 yt-dlp.exe 覆盖到 ${ytdlpPath}`
 }
