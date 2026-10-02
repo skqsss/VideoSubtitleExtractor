@@ -17,7 +17,9 @@ import {
 import type {
   AppConfig,
   CookieBrowser,
+  DownloadMode,
   DownloadTask,
+  ProbeResult,
   StartTaskParams,
   VideoFormat,
 } from '../shared/types.ts'
@@ -27,6 +29,7 @@ import {
   resolveYtdlpPath,
 } from './config.ts'
 import { prepareCookiesFile } from './cookie-service.ts'
+import { hasDouyinPageResolver, isDouyinVideoUrl } from './douyin-service.ts'
 import { YtdlpError } from './errors.ts'
 import { logger } from './logger.ts'
 import {
@@ -38,6 +41,7 @@ import { runCommand } from './process-runner.ts'
 import {
   PROGRESS_LINE_MARKER,
   buildCommonArgs,
+  buildDirectOutputArgs,
   buildFfmpegArgs,
   buildOutputArgs,
   buildProgressArgs,
@@ -176,7 +180,20 @@ export class TaskManager {
     // 提前校验 Cookie 配置，避免任务排队后才失败
     resolveTaskCookiesFile(config)
     const cachedProbe = getCachedProbe(url)
-    const format = params.mode === 'format' ? this.resolveFormat(url, params) : undefined
+    const format =
+      params.mode === 'format'
+        ? this.resolveFormat(url, params)
+        : resolveDirectPresetFormat(params.mode, cachedProbe)
+
+    // 抖音只能按直链下载：预设模式拿不到直链档位时（解析缓存被挤出、或结果来自别的通道），
+    // 继续把页面地址交给 yt-dlp 只会白等几十秒，再报一个和成因无关的 403
+    if (params.mode !== 'format' && !format && requiresDirectFormat(url, cachedProbe)) {
+      throw new YtdlpError(
+        'FORMAT_UNAVAILABLE',
+        '抖音的档位信息已失效，请重新解析这个链接后再下载。',
+      )
+    }
+
     const preset = DOWNLOAD_PRESETS.find((item) => item.mode === params.mode)
     const taskId = crypto.randomUUID()
     const now = Date.now()
@@ -451,19 +468,34 @@ export class TaskManager {
 
     let args: string[]
     try {
-      args = [
-        ...buildFormatArgs(task.mode, taskRequest?.format),
-        ...buildOutputArgs(downloadDir, task.mode, outputIndex),
-        ...buildFfmpegArgs(ffmpegDir),
-        ...buildProgressArgs(),
-        ...(task.mode === 'audio-mp3' ? [] : ['--merge-output-format', 'mp4']),
-        ...buildCommonArgs(
-          useBrowserCookies ? (taskRequest?.cookieBrowser ?? config.cookieBrowser) : 'none',
-          taskRequest?.proxy ?? config.proxy,
-          cookiesFile,
-        ),
-        task.url,
-      ]
+      const directFormat = taskRequest?.format
+      const directUrl = directFormat?.directUrl ?? ''
+      args = directFormat && directUrl
+        ? [
+            // 直链是音视频一体的 mp4，不需要选轨，只有"仅音频"要额外抽一条音轨出来
+            ...(task.mode === 'audio-mp3' ? ['-x', '--audio-format', 'mp3'] : []),
+            ...buildDirectOutputArgs(downloadDir, task.title, task.mode, directFormat, outputIndex),
+            ...buildFfmpegArgs(ffmpegDir),
+            ...buildProgressArgs(),
+            // 抖音 CDN 校验 Referer，缺了会直接返回 403
+            '--add-header',
+            'Referer:https://www.douyin.com/',
+            ...buildCommonArgs('none', taskRequest?.proxy ?? config.proxy, cookiesFile),
+            directUrl,
+          ]
+        : [
+            ...buildFormatArgs(task.mode, taskRequest?.format),
+            ...buildOutputArgs(downloadDir, task.mode, outputIndex),
+            ...buildFfmpegArgs(ffmpegDir),
+            ...buildProgressArgs(),
+            ...(task.mode === 'audio-mp3' ? [] : ['--merge-output-format', 'mp4']),
+            ...buildCommonArgs(
+              useBrowserCookies ? (taskRequest?.cookieBrowser ?? config.cookieBrowser) : 'none',
+              taskRequest?.proxy ?? config.proxy,
+              cookiesFile,
+            ),
+            task.url,
+          ]
     } catch (error) {
       return Promise.resolve({
         ...emptyOutcome,
@@ -823,6 +855,57 @@ export function shouldRetryWithNewName(
     !outcome.hasPostProcessedOutput &&
     retryCount < MAX_OUTPUT_NAME_RETRIES
   )
+}
+
+/**
+ * 判断预设模式是否必须拿到直链档位
+ * @param url - 链接
+ * @param probe - 解析缓存里的结果
+ * @returns 必须拿到直链档位时返回 true
+ * @remarks 抖音链接在桌面版走内置浏览器通道，直链是唯一可行的下载方式：
+ * 缓存缺失（上限 20 条，解析完一批再回头下载就可能被挤出）或结果来自该通道时，
+ * 退回 yt-dlp 没有任何意义，不如直接提示重新解析；
+ * 若结果是 yt-dlp 自己解析出来的（上游适配后会出现），则不拦，照原样走 yt-dlp
+ */
+export function requiresDirectFormat(url: string, probe: ProbeResult | undefined): boolean {
+  if (!isDouyinVideoUrl(url) || !hasDouyinPageResolver()) {
+    return false
+  }
+
+  return probe === undefined || probe.source === 'douyin-web'
+}
+
+/**
+ * 预设模式在直链解析结果上挑一档
+ * @param mode - 下载模式
+ * @param probe - 解析缓存里的结果
+ * @returns 命中的档位；不是直链来源或没有可用档位时返回 undefined
+ * @remarks 抖音兜底解析出的每一档都是独立直链，无法交给 yt-dlp 按 `-S` / `-f` 自己挑，
+ * 因此预设模式先在这里选定档位，下载时再走同一条直链流程
+ */
+export function resolveDirectPresetFormat(
+  mode: DownloadMode,
+  probe: ProbeResult | undefined,
+): VideoFormat | undefined {
+  if (!probe || probe.source !== 'douyin-web') {
+    return undefined
+  }
+
+  const directFormats = probe.formats.filter((item) => Boolean(item.directUrl))
+  if (directFormats.length === 0) {
+    return undefined
+  }
+
+  if (mode === 'best-1080') {
+    // 竖屏视频的"1080P"指短边，因此按宽高中的较小值筛；没有更小的档就退回最低一档
+    return (
+      directFormats.find((item) => Math.min(item.width ?? 0, item.height ?? 0) <= 1080) ??
+      directFormats[directFormats.length - 1]
+    )
+  }
+
+  // 最高画质与仅音频都取最高一档：码率越高，抽出的音轨质量越好
+  return directFormats[0]
 }
 
 /**

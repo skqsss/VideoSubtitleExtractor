@@ -19,10 +19,12 @@ import {
   setDefaultConfigPatch,
   setProjectRoot,
 } from '../src/server/config.ts'
+import { setDouyinPageResolver } from '../src/server/douyin-service.ts'
 import { getListeningPort, startHttpServer } from '../src/server/http-server.ts'
 import { logger } from '../src/server/logger.ts'
 import { TaskManager } from '../src/server/task-manager.ts'
 import type { AppConfig } from '../src/shared/types.ts'
+import { createDouyinPageResolver, disposeDouyinWindow } from './douyin-window.ts'
 
 /** 窗口默认尺寸与最小尺寸 */
 const WINDOW_WIDTH = 1180
@@ -127,6 +129,10 @@ function prepareRuntimePaths(): string {
  * @param pageUrl - 前端页面地址
  */
 function createWindow(pageUrl: string): void {
+  // 每次打开主窗口都重新登记一次：主窗口关闭时抓取窗口会被销毁，
+  // 重新打开（Dock / 任务栏激活）后要能恢复解析能力
+  setDouyinPageResolver(createDouyinPageResolver())
+
   mainWindow = new BrowserWindow({
     width: WINDOW_WIDTH,
     height: WINDOW_HEIGHT,
@@ -151,6 +157,8 @@ function createWindow(pageUrl: string): void {
   })
   mainWindow.on('closed', () => {
     mainWindow = null
+    // 抓取窗口也计入窗口列表，留着会让"关掉主窗口即退出"失效
+    disposeDouyinWindow()
   })
 
   // 外部链接交给系统浏览器打开，窗口本身只允许停在本地页面
@@ -211,6 +219,7 @@ async function bootstrap(): Promise<void> {
   createWindow(currentPageUrl)
 
   app.on('before-quit', () => {
+    disposeDouyinWindow()
     void taskManager?.dispose()
     void server.close()
   })

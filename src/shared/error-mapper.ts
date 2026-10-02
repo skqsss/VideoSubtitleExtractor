@@ -18,6 +18,7 @@ export type YtdlpErrorCode =
   | 'VIDEO_UNAVAILABLE'
   | 'GEO_RESTRICTED'
   | 'FORMAT_UNAVAILABLE'
+  | 'DIRECT_URL_EXPIRED'
   | 'CANCELED'
   | 'UNKNOWN'
 
@@ -83,6 +84,12 @@ const ERROR_RULES: Array<{ match: RegExp; code: YtdlpErrorCode; message: string 
     match: /Requested format is not available|format .* is not available/i,
     code: 'FORMAT_UNAVAILABLE',
     message: '所选清晰度当前不可用（可能需要登录或该档位已下架），请重新解析后再选一档。',
+  },
+  {
+    // 抖音兜底解析拿到的是官方播放直链，几小时后失效；yt-dlp 下载媒体文件被拒时只报这句
+    match: /unable to download video data: HTTP Error 403/i,
+    code: 'DIRECT_URL_EXPIRED',
+    message: '视频直链返回 403，直链多半已经过期。请重新解析这个链接，再点一次下载。',
   },
   {
     match: /Unable to download webpage|timed out|Temporary failure in name resolution|Connection refused|Failed to resolve|Network is unreachable|EOF occurred/i,

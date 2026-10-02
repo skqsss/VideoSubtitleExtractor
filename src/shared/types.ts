@@ -76,9 +76,18 @@ export interface VideoFormat {
   isAudioOnly: boolean
   /** 该档位对应的 -f 选择器 */
   selector: string
+  /**
+   * 播放直链
+   * @remarks 抖音兜底解析出的档位自带完整直链，下载时直接用这个地址；
+   * yt-dlp 解析出的档位为空，仍按 formatId 交给 yt-dlp 选择
+   */
+  directUrl?: string
   /** 刻度条占比（0~100），由分辨率与码率推导 */
   rulerPercent: number
 }
+
+/** 解析来源：yt-dlp 常规解析，或抖音内置浏览器兜底 */
+export type ProbeSource = 'yt-dlp' | 'douyin-web'
 
 /** 解析结果 */
 export interface ProbeResult {
@@ -100,6 +109,8 @@ export interface ProbeResult {
   hasVideoOnly: boolean
   /** 解析过程中的降级提示，如 Cookie 读取失败，空字符串表示无异常 */
   warning: string
+  /** 本次结果由哪条通道产出 */
+  source: ProbeSource
   /** 解析时间戳（毫秒） */
   probedAt: number
 }

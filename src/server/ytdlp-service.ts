@@ -24,8 +24,16 @@ import type {
 } from '../shared/types.ts'
 import { resolveYtdlpPath } from './config.ts'
 import { prepareCookiesFile } from './cookie-service.ts'
+import {
+  douyinDetailToFormatSource,
+  hasDouyinPageResolver,
+  isDouyinVideoUrl,
+  resolveDouyinPage,
+  type DouyinFormatSource,
+} from './douyin-service.ts'
 import { YtdlpError } from './errors.ts'
 import { logger } from './logger.ts'
+import { sanitizeWindowsFilename } from './output-name.ts'
 import { runCommand } from './process-runner.ts'
 
 /** 解析超时：直播间等特殊页面可能较慢 */
@@ -33,6 +41,11 @@ const PROBE_TIMEOUT_MS = 120_000
 
 /** 解析结果缓存上限，够覆盖"解析若干条再逐条下载"的用法 */
 const PROBE_CACHE_LIMIT = 20
+
+/** 抖音兜底解析的提示语：直链会过期，必须让用户看到 */
+const DOUYIN_DIRECT_WARNING =
+  '这条抖音链接由内置浏览器解析（yt-dlp 目前缺少抖音要求的签名能力），档位是官方播放直链，' +
+  '有效期只有几小时：解析后请尽快下载，过期后重新解析一次即可。'
 
 /**
  * 进度行前缀
@@ -186,6 +199,15 @@ export async function probeVideo(
     hasProxy: Boolean(proxy),
   })
 
+  // 抖音网页接口要求 a_bogus 签名，yt-dlp 拿不到签名必然 403：桌面版先走内置浏览器通道，
+  // 通道不可用（网页版 / 开发服务）或没抓到详情时，继续按原来的 yt-dlp 流程走
+  if (isDouyinVideoUrl(url) && hasDouyinPageResolver()) {
+    const viaBrowser = await probeViaDouyinPage(url)
+    if (viaBrowser) {
+      return viaBrowser
+    }
+  }
+
   const firstTry = await runProbe(ytdlpPath, url, { cookieBrowser, proxy, cookiesFile })
 
   // 浏览器 Cookie 解密失败是环境问题（Chrome/Edge 新版加密），不该让解析整体失败：
@@ -217,6 +239,76 @@ export async function probeVideo(
   }
 
   return buildProbeResult(firstTry.info as RawYtdlpInfo, url, '')
+}
+
+/**
+ * 用内置浏览器打开抖音视频页取详情
+ * @param url - 抖音链接
+ * @returns 解析结果，未抓到详情时返回 null
+ * @remarks 抓到的详情里没有可用直链（例如图文作品）时也返回 null，让调用方回退到 yt-dlp
+ */
+async function probeViaDouyinPage(url: string): Promise<ProbeResult | null> {
+  const page = await resolveDouyinPage(url)
+  if (!page) {
+    logger.warn('ytdlp-service', '内置浏览器未抓到抖音详情，回退 yt-dlp', { url })
+
+    return null
+  }
+
+  const formatSource = douyinDetailToFormatSource(page.detail)
+  if (!formatSource) {
+    logger.warn('ytdlp-service', '抖音详情里没有可下载直链，回退 yt-dlp', { url })
+
+    return null
+  }
+
+  return buildDouyinProbeResult(formatSource, url)
+}
+
+/**
+ * 把内置浏览器解析出的档位组装成解析结果
+ * @param formatSource - 详情转换结果
+ * @param url - 实际解析的链接
+ * @returns 解析结果
+ * @throws YtdlpError 没有可用档位时抛出
+ */
+function buildDouyinProbeResult(formatSource: DouyinFormatSource, url: string): ProbeResult {
+  const normalized = normalizeProbeInfo({
+    title: formatSource.title,
+    uploader: formatSource.uploader,
+    duration: formatSource.duration,
+    thumbnail: formatSource.thumbnail,
+    formats: formatSource.rawFormats,
+  })
+  if (normalized.formats.length === 0) {
+    throw new YtdlpError('FORMAT_UNAVAILABLE', '没有解析到可下载的档位，请确认链接可正常播放。')
+  }
+
+  const probeResult: ProbeResult = {
+    url,
+    title: normalized.title,
+    uploader: normalized.uploader,
+    duration: normalized.duration,
+    thumbnail: normalized.thumbnail,
+    formats: normalized.formats.map((item) => ({
+      ...item,
+      directUrl: formatSource.directUrls.get(item.formatId) ?? '',
+    })),
+    // 抖音各档直链都是带音轨的完整 mp4，没有分轨可选
+    audioFormats: [],
+    hasVideoOnly: false,
+    warning: DOUYIN_DIRECT_WARNING,
+    source: 'douyin-web',
+    probedAt: Date.now(),
+  }
+  rememberProbe(probeResult)
+
+  logger.info('ytdlp-service', '抖音兜底解析完成', {
+    title: probeResult.title,
+    formatCount: probeResult.formats.length,
+  })
+
+  return probeResult
 }
 
 /**
@@ -295,6 +387,7 @@ function buildProbeResult(
     audioFormats: normalized.audioFormats,
     hasVideoOnly: normalized.hasVideoOnly,
     warning,
+    source: 'yt-dlp',
     probedAt: Date.now(),
   }
   rememberProbe(probeResult)
@@ -373,6 +466,37 @@ export function buildOutputArgs(downloadDir: string, mode: DownloadMode, outputI
       : `%(title)s [%(width)sx%(height)s]${suffix}.%(ext)s`
 
   return ['-P', downloadDir, '-o', template, '--windows-filenames']
+}
+
+/**
+ * 生成直链下载用的输出参数
+ * @param downloadDir - 下载目录
+ * @param title - 视频标题，直接写进文件名
+ * @param mode - 下载模式，audio-mp3 不带分辨率后缀（与同名判定规则保持一致）
+ * @param format - 当前档位，用于拼分辨率后缀
+ * @param outputIndex - 同名文件序号，0 表示沿用原名
+ * @returns -P 与 -o 两个参数片段
+ * @remarks 直链交给 yt-dlp 的通用下载器时，元数据里的 title / width / height 都不可靠
+ * （通用下载器只认 URL 里的文件名），因此这里按解析阶段已知的信息写成字面量，
+ * 让产物名与 `buildOutputBasePattern` 预测的完全一致。
+ * 字面量不会走 yt-dlp 对 `%(title)s` 那套文件名清洗，标题里的换行会直接变成"无法打开文件"，
+ * 所以先用同一套规则洗一遍；`%` 是输出模板的转义符，洗完还要写成 `%%`
+ */
+export function buildDirectOutputArgs(
+  downloadDir: string,
+  title: string,
+  mode: DownloadMode,
+  format: VideoFormat,
+  outputIndex = 0,
+): string[] {
+  const suffix = outputIndex > 0 ? ` (${outputIndex})` : ''
+  const safeTitle = sanitizeWindowsFilename(title).replace(/%/g, '%%')
+  // 分辨率缺失时也要写 [NAxNA]，否则与 buildOutputBasePattern 预测的名字对不上，
+  // 同名判定会失效、重复下载要多跑一轮
+  const resolution =
+    mode === 'audio-mp3' ? '' : ` [${format.width ?? 'NA'}x${format.height ?? 'NA'}]`
+
+  return ['-P', downloadDir, '-o', `${safeTitle}${resolution}${suffix}.%(ext)s`, '--windows-filenames']
 }
 
 /**
