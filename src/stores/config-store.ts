@@ -26,6 +26,8 @@ export const useConfigStore = defineStore('config', () => {
   const isSettingsOpen = ref(false)
   /** 最近一次操作的中文提示 */
   const notice = ref('')
+  /** 提示语气，决定设置面板里提示条的颜色：info 中性 / success 成功 / error 失败 */
+  const noticeTone = ref<'info' | 'success' | 'error'>('info')
   /** Cookie 自检结果 */
   const cookieSummary = ref<CookieInspectResult | null>(null)
   /** 是否正在自检 Cookie */
@@ -47,9 +49,11 @@ export const useConfigStore = defineStore('config', () => {
       health.value = await api.health()
       if (!isReady.value) {
         notice.value = health.value.message
+        noticeTone.value = 'info'
       }
     } catch (error) {
       notice.value = error instanceof ApiError ? error.message : '读取配置失败。'
+      noticeTone.value = 'error'
     } finally {
       isLoading.value = false
     }
@@ -63,8 +67,10 @@ export const useConfigStore = defineStore('config', () => {
     try {
       health.value = await api.health()
       notice.value = health.value.ok ? '自检通过。' : health.value.message
+      noticeTone.value = health.value.ok ? 'success' : 'info'
     } catch (error) {
       notice.value = error instanceof ApiError ? error.message : '自检失败。'
+      noticeTone.value = 'error'
     }
   }
 
@@ -81,10 +87,12 @@ export const useConfigStore = defineStore('config', () => {
       config.value = await api.setConfig(patch)
       health.value = await api.health()
       notice.value = '设置已保存。'
+      noticeTone.value = 'success'
 
       return true
     } catch (error) {
       notice.value = error instanceof ApiError ? error.message : '保存设置失败。'
+      noticeTone.value = 'error'
 
       return false
     } finally {
@@ -103,9 +111,11 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const result = await api.updateYtdlp()
       notice.value = `yt-dlp 已更新到 ${result.version}。`
+      noticeTone.value = 'success'
       health.value = await api.health()
     } catch (error) {
       notice.value = error instanceof ApiError ? error.message : '更新 yt-dlp 失败。'
+      noticeTone.value = 'error'
     } finally {
       isUpdatingYtdlp.value = false
     }
@@ -143,6 +153,7 @@ export const useConfigStore = defineStore('config', () => {
     isUpdatingYtdlp,
     isSettingsOpen,
     notice,
+    noticeTone,
     cookieSummary,
     isInspectingCookies,
     isReady,

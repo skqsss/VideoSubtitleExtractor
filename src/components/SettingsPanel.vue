@@ -4,7 +4,7 @@
  * @author Codex
  * @date 2026-09-26
  */
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 
 import { useConfigStore } from '../stores/config-store.ts'
 import type { CookieBrowser } from '../types.ts'
@@ -78,6 +78,22 @@ watch(
 async function saveSettings(): Promise<void> {
   await configStore.save({ ...draft.value })
 }
+
+/** 提示条元素，用于把结果滚进视野 */
+const noticeRef = ref<HTMLElement | null>(null)
+
+// 结果提示原来是写在抽屉最底部的，点了按钮也看不到；现在改成贴在按钮上方，
+// 出现时再往后滚一下，保证"点了就有反馈"
+watch(
+  () => configStore.notice,
+  (text) => {
+    if (!text) {
+      return
+    }
+
+    void nextTick(() => noticeRef.value?.scrollIntoView({ block: 'nearest' }))
+  },
+)
 </script>
 
 <template>
@@ -166,6 +182,17 @@ async function saveSettings(): Promise<void> {
           </label>
         </div>
 
+        <p
+          v-if="configStore.notice"
+          ref="noticeRef"
+          class="settings__notice detail"
+          :class="`settings__notice--${configStore.noticeTone}`"
+          role="status"
+          aria-live="polite"
+        >
+          {{ configStore.notice }}
+        </p>
+
         <div class="settings__actions">
           <button
             type="button"
@@ -207,8 +234,6 @@ async function saveSettings(): Promise<void> {
             提示：Cookie 过期或与账号不匹配时，B 站可能只给到 480P，反而比不读取更差。
           </span>
         </p>
-
-        <p v-if="configStore.notice" class="settings__notice detail">{{ configStore.notice }}</p>
 
         <dl v-if="configStore.health" class="settings__health detail">
           <div>
@@ -290,9 +315,22 @@ async function saveSettings(): Promise<void> {
 }
 
 .settings__notice {
-  padding-left: 10px;
-  border-left: 2px solid var(--color-warn);
+  padding: 8px 10px;
+  border: var(--border-hairline);
+  border-left: 3px solid var(--color-warn);
+  background: var(--color-panel);
   color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+
+/* 成功与失败用不同颜色，避免"更新成功"也长着一条警告色的边 */
+.settings__notice--success {
+  border-left-color: var(--color-accent);
+}
+
+.settings__notice--error {
+  border-left-color: var(--color-danger);
+  color: var(--color-danger);
 }
 
 .settings__cookies {
