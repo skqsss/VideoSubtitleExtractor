@@ -33,6 +33,9 @@ const WINDOW_HEIGHT = 900
 /** 详情接口的响应里必须带的片段 */
 const DETAIL_URL_PATTERN = /\/aweme\/v1\/web\/aweme\/detail\//
 
+/** 拦截详情响应用的 URL 匹配式 */
+const DETAIL_URL_PATTERN_CDP = '*aweme/v1/web/aweme/detail/*'
+
 /** 抖音视频 CDN：解析只需要详情接口，媒体流一律拦掉 */
 const MEDIA_URL_FILTERS = ['*://*.douyinvod.com/*']
 
@@ -186,7 +189,11 @@ function ensureWindow(): Promise<BrowserWindow> {
  * 创建隐藏窗口并启用网络监听
  * @returns 准备就绪的窗口
  * @remarks 调试域必须在页面发出详情请求之前挂上，所以先加载空白页拿到 dom-ready，
- * 再开启 Network 域，最后才导航到视频页
+ * 再开启拦截，最后才导航到视频页。
+ * 这里用 Fetch 域把**响应暂停住**再读，而不是等 Network 的响应事件回来再回头去取：
+ * 抖音页面每次会连发好几条详情请求，等事件到达时响应体往往已被渲染进程丢弃，
+ * Network.getResponseBody 只会报 "No data found for resource with given identifier"，
+ * 结果把所有响应都错过、白等到超时。响应被暂停时响应体一定还在，实测 100% 成功
  */
 async function createWindow(): Promise<BrowserWindow> {
   const win = new BrowserWindow({
@@ -235,7 +242,9 @@ async function createWindow(): Promise<BrowserWindow> {
       try {
         win.webContents.debugger.attach('1.3')
         win.webContents.debugger
-          .sendCommand('Network.enable')
+          .sendCommand('Fetch.enable', {
+            patterns: [{ urlPattern: DETAIL_URL_PATTERN_CDP, requestStage: 'Response' }],
+          })
           .then(() => resolve())
           .catch(reject)
       } catch (error) {
@@ -295,36 +304,34 @@ function blockExternalProtocol(details: {
 }
 
 /**
- * 处理调试域消息，命中详情响应时取回响应体
+ * 处理调试域消息，命中详情响应时取回响应体并放行
  * @param method - 调试域方法名
  * @param params - 方法参数
+ * @remarks 无论处理结果如何都必须放行响应，否则页面会一直卡在暂停状态
  */
 async function handleDebuggerMessage(
   method: string,
   params: Record<string, unknown>,
 ): Promise<void> {
-  if (method !== 'Network.responseReceived' || !pending) {
+  if (method !== 'Fetch.requestPaused') {
     return
   }
 
-  const response = params.response as { url?: string; status?: number } | undefined
-  const responseUrl = response?.url ?? ''
-  if (!DETAIL_URL_PATTERN.test(responseUrl)) {
+  const requestId = params.requestId as string
+  const request = params.request as { url?: string } | undefined
+  const responseUrl = request?.url ?? ''
+  if (!pending || !DETAIL_URL_PATTERN.test(responseUrl)) {
+    await continuePausedResponse(requestId)
+
     return
   }
 
   const expectedId = pending.awemeId
-  // 先用请求地址上带的 aweme_id 过滤掉明显不属于本次的视频，省掉一次读响应体
-  if (!isDetailForAweme(responseUrl, undefined, expectedId)) {
-    logger.debug('douyin-window', '详情响应不属于本次请求，已忽略', { url: responseUrl })
-
-    return
-  }
 
   try {
     const body = (await resolverWindow?.webContents.debugger.sendCommand(
-      'Network.getResponseBody',
-      { requestId: params.requestId },
+      'Fetch.getResponseBody',
+      { requestId },
     )) as { body?: string; base64Encoded?: boolean } | undefined
     const text = body?.body
       ? body.base64Encoded
@@ -333,7 +340,7 @@ async function handleDebuggerMessage(
       : ''
     const parsed = JSON.parse(text) as { aweme_detail?: RawDouyinAwemeDetail | null }
     if (!parsed.aweme_detail) {
-      logger.warn('douyin-window', '详情响应里没有视频数据', { url: response?.url })
+      logger.debug('douyin-window', '这条详情响应里没有视频数据，继续等', { url: responseUrl })
 
       return
     }
@@ -348,7 +355,6 @@ async function handleDebuggerMessage(
     }
 
     logger.info('douyin-window', '已抓到抖音详情', {
-      status: response?.status,
       formatCount: parsed.aweme_detail.video?.bit_rate?.length ?? 0,
     })
     finishResolve(parsed.aweme_detail)
@@ -356,7 +362,36 @@ async function handleDebuggerMessage(
     logger.debug('douyin-window', '读取详情响应失败', {
       reason: (error as Error).message,
     })
+  } finally {
+    await continuePausedResponse(requestId)
   }
+}
+
+/**
+ * 放行被 Fetch 域暂停的响应
+ * @param requestId - 被暂停请求的 ID
+ * @remarks 响应阶段暂停要用 continueResponse；旧内核不认这个命令时退回 continueRequest，
+ * 两者都失败只记日志——留着页面卡住比丢一次解析更糟
+ */
+async function continuePausedResponse(requestId: string): Promise<void> {
+  const debuggerApi = resolverWindow?.webContents.debugger
+  if (!debuggerApi) {
+    return
+  }
+
+  try {
+    await debuggerApi.sendCommand('Fetch.continueResponse', { requestId })
+
+    return
+  } catch (error) {
+    logger.debug('douyin-window', 'continueResponse 失败，改用 continueRequest', {
+      reason: (error as Error).message,
+    })
+  }
+
+  await debuggerApi.sendCommand('Fetch.continueRequest', { requestId }).catch((error: Error) => {
+    logger.warn('douyin-window', '放行暂停的响应失败', { reason: error.message })
+  })
 }
 
 /**
