@@ -1,6 +1,6 @@
 /**
  * @file 下载重试判定单元测试
- * @author Codex
+ * @author sqksss
  * @description 覆盖"复用最终文件要换序号重下、复用合并前分片不能重下"的分支
  * @date 2026-09-30
  */

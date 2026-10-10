@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 顶部输入条：链接输入（或整段分享文案）、剪贴板粘贴、Cookie 来源、解析按钮
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { computed, ref } from 'vue'

@@ -1,6 +1,6 @@
 /**
  * @file 产物文件名唯一化
- * @author Codex
+ * @author sqksss
  * @description 按 yt-dlp --windows-filenames 的规则预测产物名，并在同名文件已存在时挑出可用的序号
  * @date 2026-09-30
  */

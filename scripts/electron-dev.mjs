@@ -1,6 +1,6 @@
 /**
  * @file 开发态启动 Electron 外壳
- * @author Codex
+ * @author sqksss
  * @description 让窗口直接加载 Vite 开发服务器（带热更新），不必每次改功能都重新打包 exe
  * @date 2026-09-26
  */

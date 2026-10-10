@@ -1,6 +1,6 @@
 /**
  * @file 分享文本链接提取单元测试
- * @author Codex
+ * @author sqksss
  * @description 用真实平台的分享文案覆盖提取规则，避免把标题、说明一起送进 yt-dlp
  * @date 2026-09-26
  */

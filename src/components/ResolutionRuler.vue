@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 刻度条：按分辨率与码率缩放的档位强弱可视化
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { computed } from 'vue'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 解析结果摘要：封面、标题、上传者、时长与预设按钮
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { computed, ref } from 'vue'

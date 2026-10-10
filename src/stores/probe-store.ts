@@ -1,6 +1,6 @@
 /**
  * @file 解析状态
- * @author Codex
+ * @author sqksss
  * @description 保存输入框内容、Cookie 选择与最近一次解析结果，供输入条与格式表共用
  * @date 2026-09-26
  */

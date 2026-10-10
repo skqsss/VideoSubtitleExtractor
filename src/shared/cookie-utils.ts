@@ -1,6 +1,6 @@
 /**
  * @file cookies.txt 解析与合并
- * @author Codex
+ * @author sqksss
  * @description 处理 Netscape 格式 Cookie 文件：解析、按域名+路径+名称去重、汇总域名
  * @date 2026-09-26
  */

@@ -1,6 +1,6 @@
 /**
  * @file yt-dlp 解析服务
- * @author Codex
+ * @author sqksss
  * @description 调用 yt-dlp -J 解析链接并把结果归一化，同时缓存解析结果供下载时复用
  * @date 2026-09-26
  */

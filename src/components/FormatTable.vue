@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 档位表格：筛选、排序与逐档下载
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { computed } from 'vue'

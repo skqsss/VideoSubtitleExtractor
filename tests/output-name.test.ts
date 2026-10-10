@@ -1,6 +1,6 @@
 /**
  * @file 产物文件名唯一化单元测试
- * @author Codex
+ * @author sqksss
  * @description 覆盖"同名文件改用序号命名"的命名预测、序号挑选与输出模板，避免又退回"复用旧文件"
  * @date 2026-09-30
  */

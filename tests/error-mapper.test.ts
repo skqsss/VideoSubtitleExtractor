@@ -1,6 +1,6 @@
 /**
  * @file yt-dlp 错误映射单元测试
- * @author Codex
+ * @author sqksss
  * @description 覆盖文档 4.5 节的错误映射表，确保每种失败都有中文可执行提示
  * @date 2026-09-26
  */

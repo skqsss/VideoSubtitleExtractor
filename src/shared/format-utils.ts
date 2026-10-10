@@ -1,6 +1,6 @@
 /**
  * @file 格式归一化与 -f 选择器生成
- * @author Codex
+ * @author sqksss
  * @description 把 yt-dlp -J 的原始 format 列表转成前端可直接渲染的结构，并生成下载用选择器
  * @date 2026-09-26
  */

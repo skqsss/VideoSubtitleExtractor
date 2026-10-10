@@ -1,6 +1,6 @@
 /**
  * @file 配置与自检状态
- * @author Codex
+ * @author sqksss
  * @description 保存下载目录、Cookie 来源、代理等配置，并维护 yt-dlp / ffmpeg 自检结果
  * @date 2026-09-26
  */

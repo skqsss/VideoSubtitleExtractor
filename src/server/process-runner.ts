@@ -1,6 +1,6 @@
 /**
  * @file 子进程封装
- * @author Codex
+ * @author sqksss
  * @description 所有外部命令统一经此执行：数组传参、禁用 shell、带超时，杜绝命令注入
  * @date 2026-09-26
  */

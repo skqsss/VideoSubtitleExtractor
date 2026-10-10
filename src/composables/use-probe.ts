@@ -1,6 +1,6 @@
 /**
  * @file 解析与发起下载
- * @author Codex
+ * @author sqksss
  * @description 把解析状态、任务创建与错误处理串在一起，组件只调用这里的方法
  * @date 2026-09-26
  */

@@ -1,6 +1,6 @@
 /**
  * @file 链接提取与规范化
- * @author Codex
+ * @author sqksss
  * @description 从平台分享文本里抠出真正的视频链接，粘贴/接口两侧共用同一套规则
  * @date 2026-09-26
  */

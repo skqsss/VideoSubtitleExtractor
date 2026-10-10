@@ -1,6 +1,6 @@
 /**
  * @file 格式归一化与选择器生成单元测试
- * @author Codex
+ * @author sqksss
  * @description 覆盖文档中"最容易写错"的 -f 选择器规则与刻度计算
  * @date 2026-09-26
  */

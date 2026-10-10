@@ -1,6 +1,6 @@
 /**
  * @file 抖音兜底解析单元测试
- * @author Codex
+ * @author sqksss
  * @description 覆盖详情 JSON 到档位列表的转换、预设档位挑选与直链输出模板，
  * 这些规则决定了表格里出现几档清晰度、下载时命中哪条直链
  * @date 2026-10-02

@@ -1,6 +1,6 @@
 /**
  * @file 抖音详情抓取窗口
- * @author Codex
+ * @author sqksss
  * @description 用隐藏窗口打开抖音视频页，借页面自己的签名请求拿到详情 JSON，
  * 再把 aweme_detail 交给服务层。窗口与调试域只在首次解析时建立，之后复用同一个会话，
  * 既省掉冷启动时间，也让抖音那边的设备指纹保持稳定

@@ -1,6 +1,6 @@
 /**
  * @file 服务端业务异常
- * @author Codex
+ * @author sqksss
  * @description 单独成文件，避免 ytdlp-service 与 cookie-service 互相 import 造成循环依赖
  * @date 2026-09-26
  */

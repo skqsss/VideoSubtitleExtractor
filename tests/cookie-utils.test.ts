@@ -1,6 +1,6 @@
 /**
  * @file cookies.txt 解析与合并单元测试
- * @author Codex
+ * @author sqksss
  * @description 覆盖多站点导出合并、去重与域名汇总，保证 B 站与抖音可以各一份一起用
  * @date 2026-09-26
  */

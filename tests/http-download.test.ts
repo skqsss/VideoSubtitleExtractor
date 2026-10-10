@@ -1,6 +1,6 @@
 /**
  * @file 文件下载（超时 / 断流 / 重试）单元测试
- * @author Codex
+ * @author sqksss
  * @description 覆盖"下载卡住要能自己结束"这条链路：空闲超时、总时长上限、断流重试与 4xx 不重试
  * @date 2026-10-01
  */

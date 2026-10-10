@@ -1,6 +1,6 @@
 /**
  * @file Cookie 文件准备与自检
- * @author Codex
+ * @author sqksss
  * @description 把配置里的一个或多个 cookies.txt（或目录）合并成单个文件交给 yt-dlp，
  * 这样 B 站与抖音可以各导出一份、一起生效，且用户原始导出文件不会被 yt-dlp 回写污染
  * @date 2026-09-26

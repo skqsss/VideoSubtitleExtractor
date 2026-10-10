@@ -1,6 +1,6 @@
 /**
  * @file yt-dlp 输出到中文提示的映射
- * @author Codex
+ * @author sqksss
  * @description 把 stderr 与退出码翻译成"下一步该做什么"的中文提示，避免用户把权限问题当成工具故障
  * @date 2026-09-26
  */

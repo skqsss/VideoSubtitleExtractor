@@ -1,6 +1,6 @@
 /**
  * @file 下载任务队列
- * @author Codex
+ * @author sqksss
  * @description 串行执行下载任务，解析进度、支持取消并清理残留文件
  * @date 2026-09-26
  */

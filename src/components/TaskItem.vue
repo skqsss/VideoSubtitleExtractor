@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 单条下载任务：进度、速度、剩余时间与操作
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { computed } from 'vue'

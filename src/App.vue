@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 页面骨架：顶部状态栏 + 粘性输入条 + 解析结果 + 任务队列
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { computed, onMounted } from 'vue'
