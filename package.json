@@ -8,9 +8,8 @@
   "main": "dist-electron/main.mjs",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node src/server/index.ts",
     "build": "run-p type-check \"build-only {@}\" --",
-    "build:main": "esbuild electron/main.ts --bundle --platform=node --format=esm --target=node20 --external:electron --external:fastify --external:@fastify/static --external:zod --outfile=dist-electron/main.mjs",
+    "build:main": "node scripts/build-electron.mjs",
     "build:electron": "npm run build && npm run build:main",
     "build:win": "npm run build:electron && electron-builder --win --publish never",
     "build:win:installer": "npm run build:electron && electron-builder --win nsis --publish never",
@@ -18,15 +17,12 @@
     "release": "npm test && npm run build:win",
     "electron:start": "npm run build:main && electron .",
     "electron:dev": "npm run build:main && node scripts/electron-dev.mjs",
-    "start": "npm run build && node src/server/index.ts",
-    "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "test": "node --test \"tests/**/*.test.ts\""
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "test:electron": "npm run build:electron && node scripts/electron-smoke.mjs"
   },
   "dependencies": {
-    "@fastify/static": "^10.1.4",
-    "fastify": "^5.12.5",
     "zod": "^4.6.5"
   },
   "devDependencies": {

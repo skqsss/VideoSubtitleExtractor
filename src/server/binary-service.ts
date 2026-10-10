@@ -1,6 +1,6 @@
 /**
  * @file 外部二进制（yt-dlp / ffmpeg）探测与更新
- * @author Codex
+ * @author sqksss
  * @description 负责自检版本与更新 yt-dlp；打包态下这些操作作用于 userData 中的可写副本
  * @date 2026-09-26
  */
@@ -174,7 +174,7 @@ export async function updateYtdlp(config: AppConfig): Promise<string> {
  */
 function buildDownloadFailureMessage(reason: string, via: string, ytdlpPath: string): string {
   const hint = via.startsWith('Node')
-    ? '当前是命令行运行模式，下载不经过系统代理；如果开着代理/VPN，请改用桌面版应用，或把代理切成 TUN 模式'
+    ? '当前运行环境没有 Electron 网络栈，下载不经过系统代理；如果开着代理/VPN，请改用桌面版应用，或把代理切成 TUN 模式'
     : '请确认网络可用、代理/VPN 已开启后重试'
 
   return `下载 yt-dlp 失败：${reason}。${hint}。也可以手动下载 yt-dlp.exe 覆盖到 ${ytdlpPath}`

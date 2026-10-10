@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 设置抽屉：下载目录、Cookie 来源、代理、并发与二进制自检
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { nextTick, ref, watch } from 'vue'
@@ -20,7 +20,6 @@ const draft = ref({
   cookiesFile: '',
   proxy: '',
   concurrency: 1,
-  port: 8787,
 })
 
 /** 可选 Cookie 浏览器 */
@@ -48,7 +47,6 @@ watch(
       cookiesFile: config.cookiesFile,
       proxy: config.proxy,
       concurrency: config.concurrency,
-      port: config.port,
     }
   },
   { immediate: true },
@@ -171,16 +169,10 @@ watch(
           />
         </label>
 
-        <div class="settings__row">
-          <label class="field">
-            <span class="field__label">同时下载数</span>
-            <input v-model.number="draft.concurrency" class="input mono" type="number" min="1" max="4" />
-          </label>
-          <label class="field">
-            <span class="field__label">服务端口（改动后需重启本地服务生效）</span>
-            <input v-model.number="draft.port" class="input mono" type="number" min="1024" max="65535" />
-          </label>
-        </div>
+        <label class="field">
+          <span class="field__label">同时下载数</span>
+          <input v-model.number="draft.concurrency" class="input mono" type="number" min="1" max="4" />
+        </label>
 
         <p
           v-if="configStore.notice"
@@ -299,13 +291,6 @@ watch(
   gap: 14px;
   padding: 16px;
   min-width: 0;
-}
-
-.settings__row {
-  display: grid;
-  /* 窄到放不下两列时自动并成一列，避免再把抽屉顶宽 */
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
 }
 
 .settings__actions {

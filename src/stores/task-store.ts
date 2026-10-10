@@ -1,7 +1,7 @@
 /**
  * @file 下载任务状态
- * @author Codex
- * @description 维护任务列表并订阅服务端进度事件（SSE）
+ * @author sqksss
+ * @description 维护任务列表并订阅主进程推送的任务快照（IPC）
  * @date 2026-09-26
  */
 
@@ -16,50 +16,35 @@ export const useTaskStore = defineStore('task', () => {
   const tasks = ref<DownloadTask[]>([])
   /** 任务操作的中文提示 */
   const notice = ref('')
-  /** 是否已建立进度订阅 */
-  const isSubscribed = ref(false)
 
   /** 正在进行的任务数量 */
   const activeCount = computed(
     () => tasks.value.filter((task) => task.status === 'running' || task.status === 'queued').length,
   )
 
-  let stream: EventSource | null = null
+  /** 取消进度订阅的函数，null 表示当前没有订阅 */
+  let unsubscribe: (() => void) | null = null
 
   /**
    * 建立进度订阅并拉取一次任务列表
    * @returns 无返回值
    */
   function connect(): void {
-    if (stream) {
+    if (unsubscribe) {
       return
     }
 
     void refresh()
-    stream = api.subscribeTasks()
-    stream.addEventListener('task', (event) => {
-      try {
-        upsert(JSON.parse((event as MessageEvent<string>).data) as DownloadTask)
-      } catch {
-        notice.value = '进度数据解析失败，正在等待下一次推送。'
-      }
-    })
-    stream.addEventListener('open', () => {
-      isSubscribed.value = true
-    })
-    stream.addEventListener('error', () => {
-      // EventSource 会自动重连，这里只更新状态提示，不打断用户操作
-      isSubscribed.value = false
-    })
+    // 主进程把结构化的任务快照直接推过来：不需要 JSON 解析，也没有断线重连
+    unsubscribe = api.subscribeTasks(upsert)
   }
 
   /**
    * 关闭进度订阅
    */
   function disconnect(): void {
-    stream?.close()
-    stream = null
-    isSubscribed.value = false
+    unsubscribe?.()
+    unsubscribe = null
   }
 
   /**
@@ -140,7 +125,6 @@ export const useTaskStore = defineStore('task', () => {
   return {
     tasks,
     notice,
-    isSubscribed,
     activeCount,
     connect,
     disconnect,

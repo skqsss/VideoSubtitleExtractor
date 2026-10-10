@@ -9,28 +9,29 @@
 
 | 层 | 选型 | 说明 |
 | --- | --- | --- |
-| 本地服务 | Node 24 + TypeScript（原生类型擦除直接运行） | `src/server`，调用 yt-dlp、管任务队列 |
-| 接口 | Fastify + zod | 只监听 `127.0.0.1`，SSE 推送进度 |
+| 主进程 | Electron + Node | `electron/`，窗口与生命周期；业务实现在 `src/server`，调用 yt-dlp、管任务队列 |
+| 通信 | Electron IPC + zod | 页面走自定义 `app://` 协议加载，接口走 `ipcMain.handle`，不监听任何端口 |
 | 界面 | Vue 3 + `<script setup>` + Pinia + Vite | `src/components` 等 |
 | 共享逻辑 | `src/shared` | 格式归一化、`-f` 选择器生成、错误映射 |
 | 外部程序 | `bin/yt-dlp.exe`、`bin/ffmpeg/` | ffmpeg 为 shared 构建，必须整目录携带 dll |
 
-传输层单独收在 `src/api/client.ts`：将来打包成桌面端时，把这个文件换成 Electron IPC 实现即可，组件不动。
+通信链路：界面 → `src/api/client.ts`（唯一传输层出口）→ `electron/preload.ts` 注入的桥 → `electron/ipc.ts` → `src/server/operations.ts`。
+通道名与统一响应信封定义在 `src/shared/ipc.ts`，加接口只需要动这条链路上的几处，组件不用改。
 
 ## 目录
 
 ```
 ├─ bin/                  # yt-dlp.exe 与 ffmpeg 目录（含 dll，随应用分发）
-├─ config.json           # 运行时配置（下载目录、Cookie 来源、代理等）
+├─ electron/             # 主进程入口、窗口与协议、IPC 注册、preload 桥、冒烟自检
 ├─ src/
-│  ├─ server/            # 本地服务：配置、二进制自检、yt-dlp 调用、任务队列、HTTP
-│  ├─ shared/            # 服务端与前端共享的类型与纯逻辑
-│  ├─ api/client.ts      # 传输层适配（网页版 fetch/SSE）
+│  ├─ server/            # 业务实现：配置、二进制自检、yt-dlp 调用、任务队列、操作层
+│  ├─ shared/            # 主进程与界面共享的类型、IPC 通道定义与纯逻辑
+│  ├─ api/client.ts      # 传输层适配（IPC 通道调用）
 │  ├─ stores/            # Pinia：配置、解析结果、任务列表
 │  ├─ composables/       # 解析、进度订阅、格式筛选
 │  ├─ components/        # UrlBar / MediaSummary / FormatTable / TaskList / SettingsPanel
 │  └─ styles/            # 设计令牌与全局样式
-└─ tests/                # 选择器生成与错误映射单元测试
+└─ tests/                # 业务逻辑与错误码单元测试，不依赖 Electron
 ```
 
 ## 运行
@@ -39,14 +40,16 @@
 
 ```powershell
 npm install
-npm run dev:server   # 终端 A：本地服务（http://127.0.0.1:8787）
-npm run dev          # 终端 B：Vite 页面（http://127.0.0.1:5173，已代理 /api）
+npm run electron:start   # 构建主进程后直接跑未封装版，加载的就是打包后那套页面
 ```
 
-只想跑单进程（构建后由本地服务直接托管页面）：
+改界面时想要热更新：先 `npm run dev` 起 Vite，再 `npm run electron:dev` 打开窗口。
+页面与主进程之间走 IPC，没有本地服务进程，**不要**单独用浏览器打开 Vite 地址（浏览器里拿不到 IPC 桥）。
+
+想一键确认"界面能渲染 + IPC 通不通"：
 
 ```powershell
-npm start            # 等价于 npm run build && node src/server/index.ts
+npm run test:electron    # 构建后用真实窗口跑冒烟自检，逐项输出 OK / FAIL
 ```
 
 ## 用法要点
@@ -64,14 +67,13 @@ npm run type-check   # vue-tsc 全量类型检查（含服务端）
 
 ## 配置
 
-首次启动会在项目根生成 `config.json`：
+首次启动会在 `%APPDATA%\videosubtitleextractor\config.json` 生成配置：
 
 ```json
 {
-  "port": 8787,
-  "ytdlpPath": "bin/yt-dlp.exe",
-  "ffmpegDir": "bin/ffmpeg",
-  "downloadDir": "D:\\video-workspace\\downloads",
+  "ytdlpPath": "%APPDATA%\\videosubtitleextractor\\bin\\yt-dlp.exe",
+  "ffmpegDir": "%APPDATA%\\videosubtitleextractor\\bin\\ffmpeg",
+  "downloadDir": "%USERPROFILE%\\Videos\\VideoSubtitleExtractor",
   "cookieBrowser": "edge",
   "proxy": "",
   "concurrency": 1
@@ -136,7 +138,7 @@ B 站多数视频能拿到 720P / 1080P（个别视频未登录也能到 1080P�
 - **中文与编码**：Windows 中文环境下 yt-dlp 默认按 GBK 输出，本项目固定传入 `--encoding utf-8` 并设置 `PYTHONUTF8`，避免中文标题与路径变乱码。
 - **进度解析**：使用 `--progress-template` 输出带 `VFPROGRESS:` 前缀的 JSON 行（`download:` 在 yt-dlp 里只是类型选择器、不会出现在输出中），同时保留 `[download] 12.3% of ...` 的回退正则。
 - **取消**：终止整个进程树（`taskkill /T /F`），并按本次任务写出的目标路径精确删除 `.part`、`.ytdl` 残留。
-- **进度推送**：SSE 响应必须带 `Content-Type: text/event-stream`，否则浏览器会直接拒绝连接（界面会一直显示"正在重连进度通道"）。
+- **进度推送**：任务快照由主进程通过 `task:update` 通道直接推给窗口，没有 SSE、也没有断线重连；窗口重开后靠一次任务列表拉取补齐。
 - **代理**：外网（YouTube）需要代理，B 站 / 抖音建议直连；输入条上的"本次走代理"用于单次覆盖。
 - **Cookie 来源的选择规则**：配置了 cookies.txt 时默认不再读浏览器 Cookie（那条路在 Chrome / Edge 上大概率失败，白白多花时间）；
   想在输入条上显式选某个浏览器时，两者会一起送给 yt-dlp。
@@ -169,17 +171,15 @@ npm run build:win:portable    # 只出免安装单文件
 
 | 目的 | 怎么做 | 是否要打包 |
 | --- | --- | --- |
-| 自己看界面改动（最快） | `npm run dev:server` + `npm run dev`，浏览器开 127.0.0.1:5173 | 否 |
+| 自动化冒烟自检（界面渲染 + IPC 通道） | `npm run test:electron` | 否 |
 | 在桌面窗口里验证（含热更新） | 先 `npm run dev`，再 `npm run electron:dev`，窗口加载 Vite 页面 | 否 |
 | 验证接近正式版的构建产物 | `npm run electron:start`（构建后跑未封装版） | 否 |
 | 给安装版/发给别人用 | `npm run build:win`，用新的 exe 覆盖安装 | **是** |
 | 只改 Cookie、下载目录、代理等配置 | 在设置里改即可 | 否 |
 | 只更新 yt-dlp | 应用内「更新 yt-dlp」按钮 | 否 |
 
-> 更新 yt-dlp 走的是应用自己的网络请求（打包版用 Electron 网络栈，会自动跟随**系统代理**）。
+> 更新 yt-dlp 走的是应用自己的网络请求（用 Electron 网络栈，会自动跟随**系统代理**）。
 > 每次尝试都有超时与断流重试，失败会给出中文原因，不会一直卡在"更新中"。
-> 注意：`npm run dev:server` 这种命令行运行模式下是直连、不走系统代理，更新失败属正常现象，
-> 用桌面版应用或把代理切成 TUN 模式即可。
 
 ### 自己手动打包的完整步骤
 
@@ -227,7 +227,7 @@ node node_modules/electron/install.js
 
 实现要点：
 
-- 桌面版把本地服务直接跑在 Electron 主进程里，窗口只加载 `http://127.0.0.1:<端口>`；配置端口被占用时自动退回随机空闲端口，保证双击一定能起来。
+- 业务逻辑跑在 Electron 主进程里，窗口通过自定义 `app://` 协议加载前端产物，前后端只走 IPC：不监听端口、不受端口占用影响，本机其它程序也访问不到这些接口。
 - 单实例锁：重复双击只聚焦已有窗口；退出时会终止所有 yt-dlp / ffmpeg 子进程，实测无残留。
 - 未做代码签名，首次运行会出现 SmartScreen 提示，点"仍要运行"即可（个人自用可接受）。
 - 打包若遇到 `EPERM: rename win-unpacked.tmp`（杀软或索引占用解压目录），本配置已通过 `electronDist` 复用本地 Electron 分发版绕开下载解包那一步。

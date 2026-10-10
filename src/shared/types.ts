@@ -1,7 +1,7 @@
 /**
  * @file 共享类型定义：本地服务与前端共用的数据契约
- * @author Codex
- * @description 集中定义 IPC/HTTP 两个传输层都会用到的请求与响应结构，避免两端类型漂移
+ * @author sqksss
+ * @description 集中定义主进程与界面之间的请求与响应结构，避免两端类型漂移
  * @date 2026-09-26
  */
 
@@ -17,10 +17,8 @@ export type CookieBrowser =
   | 'vivaldi'
   | 'whale'
 
-/** 应用配置（网页版存项目根 config.json，桌面版存 userData/config.json） */
+/** 应用配置（存在 userData/config.json） */
 export interface AppConfig {
-  /** 本地服务监听端口，仅绑定 127.0.0.1 */
-  port: number
   /** yt-dlp 可执行文件路径，相对路径按项目根解析 */
   ytdlpPath: string
   /** ffmpeg 所在目录，必须整目录携带（shared 构建带 dll） */
@@ -193,10 +191,3 @@ export interface CookieInspectResult {
   message: string
 }
 
-/** 统一错误结构 */
-export interface ApiErrorBody {
-  error: {
-    code: string
-    message: string
-  }
-}

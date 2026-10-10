@@ -1,6 +1,6 @@
 /**
  * @file 带超时与断流重试的文件下载
- * @author Codex
+ * @author sqksss
  * @description 应用自身要下载的外部文件（目前只有 yt-dlp）统一走这里：
  * 打包态用 Electron 的网络栈，自动跟随系统代理；每次尝试都有空闲超时与总时长上限，
  * 失败时给出中文原因，避免出现"一直显示更新中、既不报错也不结束"的情况
@@ -62,7 +62,7 @@ class FatalDownloadError extends Error {}
  * 选择本次下载使用的网络通道
  * @returns fetch 实现与通道说明
  * @remarks 打包态必须用 Electron 的 net.fetch：它走 Chromium 网络栈，会自动使用系统代理
- * （Clash 等"系统代理"模式就是这样生效的）；纯 Node 环境（npm run dev:server）只能直连，
+ * （Clash 等"系统代理"模式就是这样生效的）；脱离 Electron 的纯 Node 环境只能直连，
  * 这一点会写进报错信息里，免得用户以为是自己没开代理
  */
 export async function resolveDownloadChannel(): Promise<DownloadChannel> {

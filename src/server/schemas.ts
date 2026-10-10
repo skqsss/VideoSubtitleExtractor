@@ -1,6 +1,6 @@
 /**
  * @file 请求参数校验规则
- * @author Codex
+ * @author sqksss
  * @description 用 zod 强校验入参，避免把脏 URL 或脏档位 ID 传给子进程
  * @date 2026-09-26
  */
@@ -31,7 +31,11 @@ const cookieBrowserSchema = z.enum(COOKIE_BROWSER_VALUES)
 
 /** 解析请求 */
 export const probeSchema = z.object({
-  url: z.string().trim().min(1).max(URL_MAX_LENGTH),
+  url: z
+    .string({ error: '缺少视频链接。' })
+    .trim()
+    .min(1, '链接不能为空。')
+    .max(URL_MAX_LENGTH, `链接最长 ${URL_MAX_LENGTH} 个字符。`),
   cookieBrowser: cookieBrowserSchema.optional(),
   cookiesFile: z.string().trim().max(512).optional(),
   proxy: z.string().trim().max(PROXY_MAX_LENGTH).optional(),
@@ -39,8 +43,12 @@ export const probeSchema = z.object({
 
 /** 创建下载任务请求 */
 export const startTaskSchema = z.object({
-  url: z.string().trim().min(1).max(URL_MAX_LENGTH),
-  mode: z.enum(['format', 'best-1080', 'best', 'audio-mp3']),
+  url: z
+    .string({ error: '缺少视频链接。' })
+    .trim()
+    .min(1, '链接不能为空。')
+    .max(URL_MAX_LENGTH, `链接最长 ${URL_MAX_LENGTH} 个字符。`),
+  mode: z.enum(['format', 'best-1080', 'best', 'audio-mp3'], { error: '下载模式不合法。' }),
   /** 档位 ID 由 yt-dlp 生成，限制字符集避免特殊字符进入 -f 参数 */
   formatId: z
     .string()
@@ -54,7 +62,6 @@ export const startTaskSchema = z.object({
 
 /** 更新配置请求 */
 export const configSchema = z.object({
-  port: z.number().int().min(1024).max(65535).optional(),
   ytdlpPath: z.string().trim().min(1).max(512).optional(),
   ffmpegDir: z.string().trim().min(1).max(512).optional(),
   downloadDir: z.string().trim().min(1).max(512).optional(),
@@ -63,3 +70,6 @@ export const configSchema = z.object({
   proxy: z.string().trim().max(PROXY_MAX_LENGTH).optional(),
   concurrency: z.number().int().min(1).max(4).optional(),
 })
+
+/** 任务 ID：由主进程生成的 UUID，这里只挡掉空值与非字符串 */
+export const taskIdSchema = z.string({ error: '缺少任务 ID。' }).trim().min(1, '任务 ID 不合法。')

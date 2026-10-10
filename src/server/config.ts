@@ -1,8 +1,8 @@
 /**
  * @file 配置读写
- * @author Codex
- * @description 网页版配置存项目根 config.json，桌面版改存 userData；
- * 根目录、配置文件路径与默认值都可由 Electron 主进程覆盖，其他层不感知运行形态
+ * @author sqksss
+ * @description 配置文件与下载目录都放在 userData 下；
+ * 根目录、配置文件路径与默认值都由 Electron 主进程覆盖，其他层不感知运行形态
  * @date 2026-09-26
  */
 
@@ -15,7 +15,7 @@ import { logger } from './logger.ts'
 /** 项目根目录：开发态按源码位置推导，打包态由主进程覆盖成应用目录 */
 let projectRoot = path.resolve(import.meta.dirname, '..', '..')
 
-/** 配置文件路径：开发态在项目根，桌面版在 userData */
+/** 配置文件路径：默认在项目根，桌面版启动时由主进程改到 userData */
 let configPath = path.join(projectRoot, 'config.json')
 
 /** 可写数据目录：存放合并后的 Cookie 等运行时产物（打包态不在只读的 asar 里） */
@@ -37,17 +37,12 @@ const COOKIE_BROWSERS: CookieBrowser[] = [
   'whale',
 ]
 
-/** 端口合法区间 */
-const PORT_MIN = 1024
-const PORT_MAX = 65535
-
 /** 并发数合法区间 */
 const CONCURRENCY_MIN = 1
 const CONCURRENCY_MAX = 4
 
 /** 默认配置 */
 export const DEFAULT_CONFIG: AppConfig = {
-  port: 8787,
   ytdlpPath: 'bin/yt-dlp.exe',
   ffmpegDir: 'bin/ffmpeg',
   downloadDir: 'D:\\video-workspace\\downloads',
@@ -176,13 +171,9 @@ function writeConfigFile(config: AppConfig): void {
  * 校验配置字段
  * @param config - 待校验配置
  * @returns 合法配置
- * @throws Error 端口、并发数、Cookie 浏览器或代理不合法时抛出
+ * @throws Error 并发数、Cookie 浏览器或代理不合法时抛出
  */
 function sanitizeConfig(config: AppConfig): AppConfig {
-  if (!Number.isInteger(config.port) || config.port < PORT_MIN || config.port > PORT_MAX) {
-    throw new Error(`端口需为 ${PORT_MIN}~${PORT_MAX} 之间的整数`)
-  }
-
   if (
     !Number.isInteger(config.concurrency) ||
     config.concurrency < CONCURRENCY_MIN ||

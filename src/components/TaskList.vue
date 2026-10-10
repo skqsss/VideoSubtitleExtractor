@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file 下载任务列表
- * @author Codex
+ * @author sqksss
  * @date 2026-09-26
  */
 import { useTaskStream } from '../composables/use-task-stream.ts'
@@ -16,7 +16,6 @@ const taskStore = useTaskStream()
       <h2 id="tasks-title" class="section-title">下载任务</h2>
       <span class="detail muted">
         {{ taskStore.activeCount > 0 ? `${taskStore.activeCount} 个进行中` : '当前没有进行中的任务' }}
-        <template v-if="!taskStore.isSubscribed">· 正在重连进度通道</template>
       </span>
     </header>
 

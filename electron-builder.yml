@@ -16,6 +16,8 @@ electronDist: node_modules/electron/dist
 files:
   - dist/**
   - dist-electron/**
+  # 冒烟自检入口只在开发期用（npm run test:electron），不打进成品
+  - '!dist-electron/smoke.mjs'
   - package.json
   - node_modules/**
 

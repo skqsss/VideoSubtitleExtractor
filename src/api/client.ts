@@ -1,12 +1,13 @@
 /**
  * @file 传输层适配
- * @author Codex
- * @description 网页版走 fetch + SSE；将来切桌面版时只替换本文件为 IPC 实现，组件无需改动
- * @date 2026-09-26
+ * @author sqksss
+ * @description 界面唯一与主进程通信的出口：通道名与 electron/ipc.ts 一一对应，
+ * 组件只认这里的方法，不感知 IPC 的存在
+ * @date 2026-10-10
  */
 
+import { IPC_CHANNELS, type IpcChannel, type RendererIpcApi } from '../shared/ipc.ts'
 import type {
-  ApiErrorBody,
   AppConfig,
   CookieInspectResult,
   DownloadTask,
@@ -21,7 +22,7 @@ export class ApiError extends Error {
   readonly code: string
 
   /**
-   * @param code - 服务端错误码
+   * @param code - 主进程返回的错误码
    * @param message - 中文提示
    */
   constructor(code: string, message: string) {
@@ -31,59 +32,45 @@ export class ApiError extends Error {
   }
 }
 
-/** 本地服务地址：开发态由 Vite 代理，生产态由本服务自带前端产物 */
-const API_BASE = '/api'
+/**
+ * 读取 preload 注入的桥接口
+ * @returns IPC 桥
+ * @throws ApiError 页面不在应用窗口内打开（没有 preload）时抛出
+ */
+function getBridge(): RendererIpcApi {
+  const bridge = window.api
+  if (!bridge) {
+    throw new ApiError('NO_BRIDGE', '当前页面没有连上应用主进程，请从应用窗口打开。')
+  }
+
+  return bridge
+}
 
 /**
- * 发起一次接口请求
- * @param path - 相对于 /api 的路径
- * @param init - fetch 配置
- * @returns 解析后的响应体
- * @throws ApiError 服务端返回错误结构或网络不可达时抛出
+ * 发起一次接口调用
+ * @param channel - 业务通道名
+ * @param payload - 请求参数
+ * @returns 主进程返回的数据
+ * @throws ApiError 主进程返回错误信封时抛出
  */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response
-  try {
-    response = await fetch(`${API_BASE}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
-      ...init,
-    })
-  } catch {
-    throw new ApiError('NETWORK', '无法连接本地服务，请确认服务进程仍在运行。')
-  }
+async function request<T>(channel: IpcChannel, payload?: unknown): Promise<T> {
+  const response = await getBridge().invoke<T>(channel, payload)
 
   if (!response.ok) {
-    const body = (await safeParseError(response)) ?? null
-    throw new ApiError(
-      body?.error.code ?? 'UNKNOWN',
-      body?.error.message ?? `请求失败（HTTP ${response.status}）`,
-    )
+    throw new ApiError(response.error.code, response.error.message)
   }
 
-  return (await response.json()) as T
+  return response.data
 }
 
-/**
- * 尝试解析错误响应体
- * @param response - 失败的响应
- * @returns 错误结构，解析失败返回 null
- */
-async function safeParseError(response: Response): Promise<ApiErrorBody | null> {
-  try {
-    return (await response.json()) as ApiErrorBody
-  } catch {
-    return null
-  }
-}
-
-/** 本地服务接口集合 */
+/** 主进程提供的业务接口 */
 export const api = {
   /**
    * 自检 yt-dlp、ffmpeg 是否可用
    * @returns 自检结果
    */
   health(): Promise<HealthResult> {
-    return request<HealthResult>('/health')
+    return request<HealthResult>(IPC_CHANNELS.health)
   },
 
   /**
@@ -91,7 +78,7 @@ export const api = {
    * @returns 当前配置
    */
   getConfig(): Promise<AppConfig> {
-    return request<AppConfig>('/config')
+    return request<AppConfig>(IPC_CHANNELS.getConfig)
   },
 
   /**
@@ -100,7 +87,7 @@ export const api = {
    * @returns 更新后的配置
    */
   setConfig(patch: Partial<AppConfig>): Promise<AppConfig> {
-    return request<AppConfig>('/config', { method: 'PUT', body: JSON.stringify(patch) })
+    return request<AppConfig>(IPC_CHANNELS.setConfig, patch)
   },
 
   /**
@@ -108,7 +95,7 @@ export const api = {
    * @returns 更新后的版本号
    */
   updateYtdlp(): Promise<{ version: string }> {
-    return request<{ version: string }>('/ytdlp/update', { method: 'POST', body: '{}' })
+    return request<{ version: string }>(IPC_CHANNELS.updateYtdlp)
   },
 
   /**
@@ -116,7 +103,7 @@ export const api = {
    * @returns Cookie 条数与覆盖的域名
    */
   inspectCookies(): Promise<CookieInspectResult> {
-    return request<CookieInspectResult>('/cookies/inspect')
+    return request<CookieInspectResult>(IPC_CHANNELS.inspectCookies)
   },
 
   /**
@@ -125,7 +112,7 @@ export const api = {
    * @returns 解析结果
    */
   probe(params: ProbeParams): Promise<ProbeResult> {
-    return request<ProbeResult>('/probe', { method: 'POST', body: JSON.stringify(params) })
+    return request<ProbeResult>(IPC_CHANNELS.probe, params)
   },
 
   /**
@@ -134,10 +121,7 @@ export const api = {
    * @returns 任务 ID
    */
   startTask(params: StartTaskParams): Promise<{ taskId: string }> {
-    return request<{ taskId: string }>('/tasks', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    })
+    return request<{ taskId: string }>(IPC_CHANNELS.startTask, params)
   },
 
   /**
@@ -145,7 +129,7 @@ export const api = {
    * @returns 任务数组
    */
   listTasks(): Promise<{ tasks: DownloadTask[] }> {
-    return request<{ tasks: DownloadTask[] }>('/tasks')
+    return request<{ tasks: DownloadTask[] }>(IPC_CHANNELS.listTasks)
   },
 
   /**
@@ -154,10 +138,7 @@ export const api = {
    * @returns 是否处理成功
    */
   cancelTask(taskId: string): Promise<{ ok: boolean }> {
-    return request<{ ok: boolean }>(`/tasks/${taskId}/cancel`, {
-      method: 'POST',
-      body: '{}',
-    })
+    return request<{ ok: boolean }>(IPC_CHANNELS.cancelTask, taskId)
   },
 
   /**
@@ -166,17 +147,15 @@ export const api = {
    * @returns 是否处理成功
    */
   revealTask(taskId: string): Promise<{ ok: boolean }> {
-    return request<{ ok: boolean }>(`/tasks/${taskId}/reveal`, {
-      method: 'POST',
-      body: '{}',
-    })
+    return request<{ ok: boolean }>(IPC_CHANNELS.revealTask, taskId)
   },
 
   /**
-   * 订阅任务进度事件
-   * @returns EventSource 实例，调用方负责关闭
+   * 订阅任务进度
+   * @param listener - 收到任务快照的回调
+   * @returns 取消订阅的函数
    */
-  subscribeTasks(): EventSource {
-    return new EventSource(`${API_BASE}/events`)
+  subscribeTasks(listener: (task: DownloadTask) => void): () => void {
+    return getBridge().onTask(listener)
   },
 }
