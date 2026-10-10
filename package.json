@@ -1,6 +1,6 @@
 {
   "name": "videosubtitleextractor",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "粘贴视频链接解析全部可用分辨率并下载原片，本地运行，不经过第三方",
   "author": "local",
   "private": true,
